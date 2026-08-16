@@ -1,0 +1,539 @@
+/* Calendar & Tasks — one stylesheet for both the full app and the compact
+   dashboard embed.  The embed sets <body class="compact">; everything else is
+   shared so the two never drift apart.
+
+   Theme: dark by default, light via [data-theme="light"] or the OS preference.
+   Colors are tokens only — a host dashboard can override them from outside. */
+
+:root{
+  --bg:#0f1319; --bg2:#151a22; --panel:#11161d; --card:#1b222c;
+  --line:#252d39; --line-soft:#1e2530;
+  --text:#e9edf3; --muted:#96a2b3; --faint:#68748a;
+  --accent:#5b9dff; --accent-soft:#1b2a44;
+  --now:#e2604f; --ok:#3fbf7f; --warn:#e0a83a;
+  --radius:10px;
+  --hour-h:44px;            /* one hour of grid height */
+  --gutter:44px;            /* hour labels column */
+  --tasks-w:238px;
+}
+:root[data-theme="light"]{
+  --bg:#ffffff; --bg2:#f7f8fa; --panel:#f2f4f7; --card:#eef1f5;
+  --line:#e2e6ec; --line-soft:#edf0f4;
+  --text:#1a1f28; --muted:#5d6878; --faint:#8b95a5;
+  --accent:#2f6fd0; --accent-soft:#e6efff;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#ffffff; --bg2:#f7f8fa; --panel:#f2f4f7; --card:#eef1f5;
+    --line:#e2e6ec; --line-soft:#edf0f4;
+    --text:#1a1f28; --muted:#5d6878; --faint:#8b95a5;
+    --accent:#2f6fd0; --accent-soft:#e6efff;
+  }
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text); overflow:hidden;
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+/* The embed lives inside a dashboard card that already paints a background. */
+body.compact{background:transparent}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+input,select,textarea{font:inherit;color:inherit}
+
+#app{display:flex;height:100%;min-height:0}
+.cal{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ── top bar ─────────────────────────────────────────────── */
+.bar{display:flex;align-items:center;gap:10px;padding:8px 10px;flex:0 0 auto;
+  border-bottom:1px solid var(--line)}
+.bar .title{font-weight:650;font-size:15px;letter-spacing:-.01em;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+body.compact .bar{padding:6px 8px}
+body.compact .bar .title{font-size:13.5px}
+.nav{display:flex;align-items:center;gap:2px;flex:0 0 auto}
+.nav button,.icon{border:1px solid transparent;border-radius:8px;padding:4px 9px;
+  color:var(--muted);line-height:1.4}
+.nav button:hover,.icon:hover{background:var(--card);color:var(--text)}
+.nav .today{border-color:var(--line);font-size:13px;padding:4px 11px}
+.spacer{flex:1}
+.views{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:8px;padding:2px}
+.views button{padding:3px 10px;border-radius:6px;font-size:13px;color:var(--muted)}
+.views button[aria-pressed="true"]{background:var(--card);color:var(--text);font-weight:600}
+.add{background:var(--accent);color:#fff;border-radius:8px;padding:5px 12px;
+  font-weight:600;font-size:13px}
+.add:hover{filter:brightness(1.08)}
+
+/* ── grid ────────────────────────────────────────────────── */
+.grid-head,.allday{display:grid;grid-template-columns:var(--gutter) repeat(var(--cols),1fr);
+  flex:0 0 auto}
+.grid-head{border-bottom:1px solid var(--line)}
+/* Day header on ONE LINE: "MON 17". Centered flex + ellipsis so narrow
+   columns don't overflow. */
+.dayhead{padding:6px 4px;border-left:1px solid var(--line-soft);min-width:0;
+  display:flex;align-items:baseline;justify-content:center;gap:5px;
+  white-space:nowrap;overflow:hidden;cursor:pointer}
+.dayhead .dow{font-size:11px;color:var(--faint);text-transform:uppercase;
+  letter-spacing:.05em;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis}
+.dayhead .dnum{font-size:15px;font-weight:600;line-height:1.2;flex:0 0 auto}
+.dayhead.is-today .dnum{background:var(--accent);color:#fff;border-radius:999px;
+  min-width:22px;text-align:center;padding:1px 6px}
+.dayhead.is-today .dow{color:var(--accent)}
+.dayhead:hover{background:var(--card)}
+body.compact .dayhead{padding:4px 2px}
+body.compact .dayhead .dnum{font-size:13.5px}
+body.compact .dayhead .dow{font-size:10px}
+/* very narrow columns drop the weekday name, keep the number */
+@media (max-width:820px){ .dayhead .dow{display:none} }
+
+.allday{border-bottom:1px solid var(--line);min-height:24px;max-height:66px;overflow-y:auto}
+.allday .lbl{font-size:10.5px;color:var(--faint);padding:4px 5px;text-align:right;
+  line-height:1.2}
+.allday .cell{border-left:1px solid var(--line-soft);padding:2px;min-width:0;
+  display:flex;flex-direction:column;gap:2px}
+
+.scroll{flex:1;min-height:0;overflow-y:auto;position:relative}
+.grid{display:grid;grid-template-columns:var(--gutter) repeat(var(--cols),1fr);
+  position:relative}
+.hours{position:relative}
+.hours .h{height:var(--hour-h);font-size:10.5px;color:var(--faint);text-align:right;
+  padding-right:6px;transform:translateY(-6px)}
+.daycol{border-left:1px solid var(--line-soft);position:relative;min-width:0}
+.daycol .slot{height:var(--hour-h);border-top:1px solid var(--line-soft)}
+.daycol .slot.half{border-top-style:dotted;opacity:.55}
+.daycol.is-today{background:color-mix(in srgb, var(--accent) 5%, transparent)}
+/* weekends intentionally render like weekdays (no tint) */
+
+.ev{position:absolute;left:2px;right:2px;border-radius:6px;padding:2px 5px;
+  font-size:11.5px;line-height:1.3;overflow:hidden;cursor:pointer;
+  background:var(--accent-soft);border-left:3px solid var(--accent);color:var(--text)}
+.ev:hover{filter:brightness(1.15)}
+.ev .t{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .w{color:var(--muted);font-size:10.5px}
+.ev.chip{position:static;left:auto;right:auto;border-radius:5px;padding:1px 6px;
+  border-left-width:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-size:11px}
+.ev.task{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.ev.task.done{opacity:.5;text-decoration:line-through}
+
+.nowline{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--now);
+  z-index:5;pointer-events:none}
+.nowline::before{content:"";position:absolute;left:-4px;top:-4px;width:7px;height:7px;
+  border-radius:50%;background:var(--now)}
+
+/* ── tasks pane ──────────────────────────────────────────── */
+.tasks{width:var(--tasks-w);flex:0 0 var(--tasks-w);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;background:var(--panel);min-height:0}
+.tasks[hidden]{display:none}
+.tasks .head{display:flex;align-items:center;gap:8px;padding:8px 10px;
+  border-bottom:1px solid var(--line);flex:0 0 auto}
+.tasks .head b{font-size:13.5px;font-weight:650}
+.tasks .body{flex:1;overflow-y:auto;padding:6px 8px 12px}
+.tlist{margin-bottom:10px}
+.tlist>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;
+  font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;
+  font-weight:600;padding:4px 2px}
+.tlist>summary::-webkit-details-marker{display:none}
+.tlist>summary::before{content:"▾";font-size:10px;transition:transform .15s}
+.tlist:not([open])>summary::before{transform:rotate(-90deg)}
+.tlist .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+.tlist .n{margin-left:auto;color:var(--faint);font-weight:500}
+
+.task{display:flex;align-items:flex-start;gap:7px;padding:4px 3px;border-radius:6px;
+  font-size:13px}
+.task:hover{background:var(--card)}
+.task.sub{padding-left:20px}
+.task input[type=checkbox]{margin:2px 0 0;accent-color:var(--ok);flex:0 0 auto;cursor:pointer}
+.task .txt{flex:1;min-width:0}
+.task .ttl{display:block;word-break:break-word}
+.task .due{font-size:11px;color:var(--muted)}
+.task .due.late{color:var(--now)}
+.task .due.today{color:var(--accent)}
+.task.done .ttl{text-decoration:line-through;color:var(--faint)}
+.task .x{opacity:0;color:var(--faint);padding:0 3px;font-size:12px}
+.task:hover .x{opacity:1}
+.task .x:hover{color:var(--now)}
+.newtask{display:flex;align-items:center;gap:6px;padding:4px 3px;margin-top:2px}
+.newtask input{flex:1;min-width:0;background:transparent;border:0;outline:0;
+  border-bottom:1px dashed var(--line);padding:3px 1px;font-size:13px}
+.newtask input:focus{border-bottom-color:var(--accent)}
+.newtask input::placeholder{color:var(--faint)}
+
+/* ── dialog ──────────────────────────────────────────────── */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--bg2);color:var(--text);
+  padding:18px;width:min(430px,calc(100vw - 28px));box-shadow:0 12px 40px rgba(0,0,0,.45)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h3{margin:0 0 14px;font-size:15.5px}
+.row{display:flex;gap:8px;margin-bottom:10px}
+.row>*{flex:1;min-width:0}
+label.f{display:block;font-size:12px;color:var(--muted);margin-bottom:10px}
+label.f input,label.f select,label.f textarea{width:100%;margin-top:4px;background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13.5px;outline:0}
+label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:var(--accent)}
+label.chk{display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:10px}
+label.chk input{accent-color:var(--accent)}
+dialog menu{display:flex;gap:8px;justify-content:flex-end;padding:0;margin:14px 0 0}
+dialog menu button{border:1px solid var(--line);border-radius:8px;padding:6px 13px;font-size:13.5px}
+dialog menu .primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+dialog menu .danger{color:var(--now);margin-right:auto}
+
+.hint{font-size:12px;color:var(--faint);margin:2px 0 0}
+.feeds{font-size:12.5px;color:var(--muted);line-height:1.7}
+.feeds code{background:var(--card);border:1px solid var(--line);border-radius:5px;
+  padding:1px 5px;font-size:11.5px;word-break:break-all}
+
+/* ── responsive ──────────────────────────────────────────── */
+@media (max-width:900px){
+  :root{--tasks-w:0px}
+  .tasks{position:absolute;right:0;top:0;bottom:0;width:250px;flex-basis:250px;z-index:20;
+    box-shadow:-8px 0 24px rgba(0,0,0,.35)}
+}
+@media (max-width:640px){
+  :root{--hour-h:40px;--gutter:36px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+
+/* ── task pane: tabs + drag-to-resize ── */
+.tasks{position:relative}
+.tasks .head{flex-wrap:wrap;row-gap:6px}
+.tabs{display:flex;gap:2px;margin-left:auto;background:var(--bg2);
+  border:1px solid var(--line);border-radius:8px;padding:2px}
+.tabs button{padding:3px 9px;border-radius:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+.tabs button:hover{color:var(--text)}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--text);font-weight:600}
+
+.tasks-resize{position:absolute;left:-4px;top:0;bottom:0;width:9px;cursor:col-resize;
+  z-index:25;background:transparent}
+.tasks-resize::after{content:"";position:absolute;left:3px;top:0;bottom:0;width:3px;
+  background:transparent;transition:background .12s}
+.tasks-resize:hover::after{background:var(--accent)}
+
+/* ── create dialog: kind switch (Event | Task) ── */
+.kinds{display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);
+  border-radius:9px;padding:3px;margin-bottom:12px}
+.kinds .kind{flex:1;padding:7px 10px;border-radius:7px;font-size:13.5px;color:var(--muted)}
+.kinds .kind:hover{color:var(--text)}
+.kinds .kind[aria-selected="true"]{background:var(--card);color:var(--text);font-weight:600}
+
+/* ── readable summary card at the top of dialogs ── */
+.kart{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;margin-bottom:14px}
+.kart-ust{display:flex;align-items:center;gap:8px;font-size:14.5px;word-break:break-word}
+.kart-nokta{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.kart-alt{margin-top:5px;font-size:12px;color:var(--muted)}
+.kart-not{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
+  font-size:13px;color:var(--muted);white-space:pre-wrap;word-break:break-word;
+  max-height:120px;overflow-y:auto}
+
+/* make it obvious the all-day strip is clickable */
+.allday .cell{cursor:pointer}
+.allday .cell:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+
+
+/* ══ views · drag & drop · zoom · second timezone · colors/reminders ·
+   search · agenda · undo ══ */
+
+/* ── header controls ── */
+.zoom{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:8px;padding:2px}
+.zoom button{padding:3px 9px;border-radius:6px;font-size:14px;color:var(--muted);line-height:1.2}
+.zoom button:hover{background:var(--card);color:var(--text)}
+
+.searchwrap{position:relative}
+.searchwrap input{background:var(--bg2);border:1px solid var(--line);border-radius:8px;
+  padding:5px 10px;font-size:13px;width:170px;outline:0;color:var(--text)}
+.searchwrap input:focus{border-color:var(--accent);width:230px}
+#searchresults{position:absolute;top:calc(100% + 6px);right:0;z-index:60;width:300px;
+  max-height:320px;overflow-y:auto;background:var(--bg2);border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.45);padding:4px}
+.sres{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;
+  padding:7px 9px;border-radius:7px;font-size:13px}
+.sres:hover{background:var(--card)}
+.sres .st{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sres .ss{margin-left:auto;color:var(--faint);font-size:11.5px;flex:0 0 auto}
+.sres.none{color:var(--faint);cursor:default}
+
+/* ── second timezone: two-column hour gutter ── */
+#gridwrap.tz2on{--gutter:86px}
+.grid-head .corner{display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 4px 2px;gap:2px}
+.grid-head .corner .tzl{font-size:9px;color:var(--faint);text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;max-width:50%}
+.hours .h{display:flex;justify-content:flex-end;gap:6px}
+.hours .h .t2{color:var(--faint);opacity:.75}
+.hours .h .t1{min-width:34px;text-align:right}
+
+/* ── drag & drop ── */
+body.dragging{user-select:none;cursor:grabbing}
+body.dragging *{cursor:grabbing!important}
+.ev{touch-action:pan-y}
+.ev .rs{position:absolute;left:0;right:0;bottom:-2px;height:7px;cursor:ns-resize}
+.ev.chip .rs{display:none}
+.ev.drag{opacity:.75;z-index:30;box-shadow:0 8px 22px rgba(0,0,0,.5);pointer-events:none}
+.droptarget{outline:2px dashed var(--accent);outline-offset:-2px;
+  background:color-mix(in srgb,var(--accent) 10%,transparent)!important}
+.dragsel{position:absolute;left:2px;right:2px;z-index:8;border-radius:6px;
+  background:color-mix(in srgb,var(--accent) 22%,transparent);
+  border:1px solid var(--accent);font-size:11px;color:var(--text);
+  display:flex;align-items:flex-start;justify-content:center;padding-top:2px;
+  pointer-events:none}
+.task.drag{opacity:.5}
+.task.over{box-shadow:inset 0 2px 0 var(--accent)}
+.task[draggable="true"]{cursor:grab}
+
+/* ── scope dialog (only this / this and following / all) ── */
+#scopedlg{border:1px solid var(--line);border-radius:14px;background:var(--bg2);
+  color:var(--text);padding:18px;width:min(340px,calc(100vw - 28px));
+  box-shadow:0 12px 40px rgba(0,0,0,.45)}
+#scopedlg::backdrop{background:rgba(0,0,0,.5)}
+#scopedlg h3{margin:0 0 12px;font-size:15px}
+.scopeopt{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:8px;
+  font-size:13.5px;cursor:pointer}
+.scopeopt:hover{background:var(--card)}
+.scopeopt input{accent-color:var(--accent)}
+#scopedlg menu{display:flex;gap:8px;justify-content:flex-end;padding:0;margin:12px 0 0}
+#scopedlg menu button{border:1px solid var(--line);border-radius:8px;padding:6px 13px;font-size:13.5px}
+#scopedlg menu .primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+/* ── renk paleti ── */
+.palette{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.pal{width:20px;height:20px;border-radius:50%;border:2px solid transparent;
+  padding:0;flex:0 0 auto}
+.pal.cal{background:conic-gradient(var(--accent) 0 50%, var(--card) 50% 100%);
+  border-color:var(--line)}
+.pal.sel{border-color:var(--text);transform:scale(1.12)}
+.pal:hover{transform:scale(1.12)}
+
+/* ── reminder chips ── */
+.rems{margin-top:6px}
+.remchips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
+.remchip{background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font-size:11.5px;color:var(--text)}
+.remchip:hover{border-color:var(--now);color:var(--now)}
+.remsel{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:5px 8px;font-size:12.5px;color:var(--muted)}
+
+/* ── weekday chips (BYDAY) ── */
+.bydays{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.byday{border:1px solid var(--line);border-radius:999px;padding:3px 9px;
+  font-size:11.5px;color:var(--muted)}
+.byday.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.rpthint{color:var(--muted);font-weight:400}
+
+/* ── geri al bildirimi ── */
+#toast{position:fixed;left:50%;bottom:18px;transform:translate(-50%,80px);
+  display:flex;align-items:center;gap:14px;background:var(--card);color:var(--text);
+  border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:100;opacity:0;
+  transition:transform .2s,opacity .2s;max-width:min(480px,calc(100vw - 30px))}
+#toast.show{transform:translate(-50%,0);opacity:1}
+#toast button{color:var(--accent);font-weight:700;font-size:13px;flex:0 0 auto}
+#toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── month view cells ── */
+.mcell{border-top:1px solid var(--line-soft);padding:2px 3px;overflow:hidden}
+.mnum{font-size:11.5px;color:var(--muted);text-align:right;padding:1px 2px}
+
+/* ── schedule (agenda) view ── */
+.agenda{padding:10px 14px}
+.aday{display:flex;gap:14px;padding:9px 4px;border-bottom:1px solid var(--line-soft)}
+.ahead{flex:0 0 120px;display:flex;align-items:baseline;gap:8px}
+.adnum{font-size:20px;font-weight:650;min-width:30px;text-align:center;line-height:1.3}
+.aday.is-today .adnum{background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px}
+.adname{font-size:11.5px;color:var(--muted)}
+.alist{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.arow{display:flex;align-items:baseline;gap:9px;padding:3px 7px;border-radius:7px;
+  font-size:13px;cursor:pointer;min-width:0}
+.arow:hover{background:var(--card)}
+.adot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;align-self:center}
+.awhen{color:var(--muted);font-size:12px;flex:0 0 auto;min-width:86px}
+.attl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arow.task.done .attl{text-decoration:line-through;color:var(--faint)}
+.aempty{color:var(--faint);font-size:13px;padding:20px}
+
+/* keep the header from overflowing on narrow FULL-page windows (the
+   compact embed wraps its bar instead) */
+@media (max-width:1140px){ body:not(.compact) .searchwrap{display:none} }
+@media (max-width:940px){ body:not(.compact) .zoom{display:none} }
+/* (views are a dropdown now — no per-button hiding needed) */
+
+/* ══ dialog & interaction polish ══ */
+/* Enter's default submitter: invisible "ok" first — never Cancel */
+.ghost-ok{position:absolute;width:1px;height:1px;padding:0;margin:-1px;border:0;
+  overflow:hidden;clip-path:inset(50%)}
+
+/* the hour gutter is drag-to-zoom */
+.hours.zoomable{cursor:ns-resize;user-select:none;touch-action:none}
+.hours.zoomable:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+
+/* task items: the circle completes, the body opens the card */
+.cbx{cursor:pointer;flex:0 0 auto;margin-right:4px}
+.cbx:hover{color:var(--ok)}
+.ev.chip{display:flex;align-items:center;min-width:0}
+.ev.chip .ct{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev.taskev{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent);
+  display:flex;align-items:flex-start;gap:2px;font-size:11px}
+.ev.taskev .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev.taskev.done{opacity:.5;text-decoration:line-through}
+
+/* hide-completed-on-calendar toggle */
+#toggledone[aria-pressed="true"]{color:var(--faint);text-decoration:line-through}
+
+/* all-day strip: single row by default, label click expands */
+.allday .lbl{cursor:pointer;white-space:nowrap;user-select:none}
+.allday .lbl:hover{color:var(--text)}
+.allday.kapali{max-height:26px;overflow:hidden}
+.allday.kapali .cell{flex-direction:row;gap:3px;overflow:hidden}
+.allday.kapali .cell .ev.chip{flex:0 1 auto;min-width:24px}
+
+/* continuation segment of a multi-day event */
+.ev.devam{border-left-style:dashed;opacity:.92}
+
+/* compact embed carries the full toolset: allow wrapping, shrink a bit */
+body.compact .views button{padding:2px 7px;font-size:12px}
+body.compact .zoom button{padding:2px 7px}
+
+/* future occurrences of routine tasks: dashed edge, no fading */
+.ev.task.proj,.ev.taskev.proj{border-left-style:dashed;cursor:pointer}
+
+
+/* ── movable compact create dialog ── */
+#dlg.movable{position:fixed;margin:0;z-index:80;width:min(400px,calc(100vw - 24px));
+  box-shadow:0 16px 48px rgba(0,0,0,.55)}
+.dlg-grip{cursor:move;text-align:center;color:var(--faint);font-size:13px;
+  letter-spacing:3px;line-height:1;margin:-8px -8px 8px;padding:5px;user-select:none;
+  touch-action:none;border-radius:8px}
+.dlg-grip:hover{background:var(--card);color:var(--muted)}
+.titlerow{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.titlerow .kinds.mini{margin:0;padding:2px;flex:0 0 auto}
+.titlerow .kinds.mini .kind{padding:5px 9px;font-size:15px}
+.titlerow input#c-title{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px;font-size:14px;outline:0}
+.titlerow input#c-title:focus{border-color:var(--accent)}
+.chk.ico{margin:0;flex:0 0 auto;gap:3px;font-size:15px;cursor:pointer}
+.chk.ico input{accent-color:var(--accent)}
+
+
+/* hidden form fields must not take space: label.f's display:block used to
+   override the [hidden] attribute */
+label.f[hidden],.f[hidden]{display:none!important}
+
+/* create-preview pinned while the dialog is open */
+.dragsel.pinned{pointer-events:none;border-style:dashed;opacity:.85}
+
+
+/* wider search box — fixed width, no grow-on-focus */
+.searchwrap input{width:280px}
+.searchwrap input:focus{width:280px}
+
+/* saat dilimi kose etiketleri okunur olsun */
+.grid-head .corner .tzl{font-size:10px;font-weight:600;color:var(--muted)}
+
+/* onizleme kutusunda etiket kirpilmasin (kisa kutuda bile gorunsun) */
+.dragsel{overflow:visible;white-space:nowrap;font-weight:600}
+
+
+/* multi-day preview: the end label anchors to the BOTTOM of the last box */
+.dragsel.endlbl{align-items:flex-end;padding-top:0;padding-bottom:2px}
+
+
+/* ══ PHONE LAYOUT (PWA) ══ */
+@media (max-width:700px){
+  /* two-row header: nav + actions on top, centered date below */
+  .bar{flex-wrap:wrap;row-gap:5px;padding:7px 8px;
+    padding-top:calc(7px + env(safe-area-inset-top))}
+  .bar .title{flex:1 1 100%;order:10;text-align:center;font-size:13.5px;padding:0}
+  .spacer{display:none}
+  /* the view dropdown takes one button's worth of space on phones too */
+  .nav .today{padding:4px 8px;font-size:12px}
+  .add{padding:5px 10px;font-size:12.5px}
+  .icon{padding:4px 6px}
+  /* task drawer full height, notch-safe */
+  .tasks{width:min(300px,86vw);flex-basis:min(300px,86vw);
+    padding-top:env(safe-area-inset-top)}
+  /* prevent double-tap zoom on controls */
+  button,.views,.zoom{touch-action:manipulation}
+  /* shorter month cells on phones */
+  .monthgrid{grid-auto-rows:minmax(56px,1fr)!important}
+  /* narrower agenda date column */
+  .ahead{flex-basis:86px}
+  dialog{width:min(400px,calc(100vw - 16px))}
+  #dlg.movable{width:min(400px,calc(100vw - 16px))}
+}
+
+
+/* ══ circular task checkboxes (2px) ══ */
+.task input[type=checkbox]{appearance:none;-webkit-appearance:none;width:15px;height:15px;
+  border:2px solid var(--muted);border-radius:50%;background:transparent;
+  display:inline-block;position:relative;transition:border-color .12s,background .12s}
+.task input[type=checkbox]:hover{border-color:var(--ok)}
+.task input[type=checkbox]:checked{background:var(--ok);border-color:var(--ok)}
+.task input[type=checkbox]:checked::after{content:"✓";position:absolute;inset:0;
+  color:#fff;font-size:10px;line-height:11px;text-align:center;font-weight:700}
+label.chk input[type=checkbox]{appearance:none;-webkit-appearance:none;width:16px;height:16px;
+  border:2px solid var(--muted);border-radius:50%;background:transparent;position:relative}
+label.chk input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+label.chk input[type=checkbox]:checked::after{content:"✓";position:absolute;inset:0;
+  color:#fff;font-size:10.5px;line-height:12px;text-align:center;font-weight:700}
+/* chips and grid task blocks use the same circle */
+.cbx{width:13px;height:13px;border:2px solid var(--ok);border-radius:50%;
+  display:inline-block;flex:0 0 auto;position:relative;background:transparent}
+.cbx.on{background:var(--ok)}
+.cbx.on::after{content:"✓";position:absolute;inset:0;color:#fff;font-size:9px;
+  line-height:10px;text-align:center;font-weight:700}
+.cbx:hover{filter:brightness(1.2)}
+
+/* settings: import buttons */
+.impbtn{display:block;margin-top:7px;padding:8px 11px;border:1px dashed var(--line);
+  border-radius:9px;cursor:pointer;font-size:13px;background:var(--bg)}
+.impbtn:hover{border-color:var(--accent);color:var(--text)}
+
+
+/* view switcher is a dropdown — takes far less header space */
+select.views{background:var(--bg2);border:1px solid var(--line);border-radius:8px;
+  padding:4px 8px;font-size:13px;color:var(--text);cursor:pointer;outline:0}
+select.views:focus{border-color:var(--accent)}
+body.compact select.views{padding:3px 6px;font-size:12px}
+
+
+/* ══ trash bin & routine polish ══ */
+/* hollow, non-clickable circle on projected occurrences */
+.cbx.off{border-color:var(--faint);pointer-events:none}
+/* event boxes: two-line titles when tall, no time row when tiny */
+.ev.coksatir .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden;line-height:1.25}
+.ev.kucuk .w{display:none}
+.ev.kucuk{padding-top:1px;padding-bottom:1px;font-size:11px}
+/* task pane tab dropdown */
+select.tabs{background:var(--bg2);border:1px solid var(--line);border-radius:8px;
+  padding:3px 7px;font-size:12px;color:var(--text);cursor:pointer;outline:0;margin-left:auto}
+select.tabs:focus{border-color:var(--accent)}
+/* Deleted (trash) view */
+.thint{font-size:11px;color:var(--faint);padding:4px 3px 8px}
+.trow{display:flex;align-items:baseline;gap:7px;padding:5px 3px;border-radius:6px;font-size:13px}
+.trow:hover{background:var(--card)}
+.trow .txt{flex:1;min-width:0}
+.trow .ttl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .due{font-size:11px;color:var(--muted)}
+.trow .gr{color:var(--accent);font-weight:600;font-size:12px;flex:0 0 auto}
+.trow .gr:hover{text-decoration:underline}
+
+
+/* the timezone corner toggles between one and two columns */
+.grid-head .corner.tzclick{cursor:pointer;border-radius:6px}
+.grid-head .corner.tzclick:hover{background:var(--card)}
+.grid-head .corner.tzclick .tzl{border-bottom:1px dotted var(--faint)}
+
+
+/* task card: description first and large */
+.kart-not-buyuk{margin-top:6px;padding-top:0;border-top:0;max-height:44vh;
+  font-size:13.5px;color:var(--text)}
+.kart-not-buyuk + .kart-alt{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+
+
+/* a lone label gets the full corner width (was clipped to "G…") */
+.grid-head .corner .tzl:only-child{max-width:100%}

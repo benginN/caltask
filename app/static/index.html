@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Calendar</title>
+<link rel="stylesheet" href="static/style.css?v=22">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗓</text></svg>">
+<!-- PWA: "Add to Home Screen" opens it like a full-screen app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calendar">
+<meta name="theme-color" content="#0f1319">
+<link rel="apple-touch-icon" href="static/icon.png">
+</head>
+<body>
+<div id="app">
+  <section class="cal">
+    <header class="bar">
+      <div class="nav">
+        <button id="prev" title="&larr;">&lsaquo;</button>
+        <button id="today" class="today">Today</button>
+        <button id="next" title="&rarr;">&rsaquo;</button>
+      </div>
+      <div class="title" id="title"></div>
+      <div class="spacer"></div>
+      <div class="searchwrap full-only">
+        <input id="search" type="search" placeholder="Search…">
+        <div id="searchresults" hidden></div>
+      </div>
+      <select class="views" id="viewsel" title="View">
+        <option value="day">Day</option>
+        <option value="3day">3 days</option>
+        <option value="week" selected>Week</option>
+        <option value="7day">7 days</option>
+        <option value="month">Month</option>
+        <option value="agenda">Schedule</option>
+      </select>
+      <div class="zoom full-only">
+        <button id="zoomout" title="Zoom out">−</button>
+        <button id="zoomin" title="Zoom in">+</button>
+      </div>
+      <button class="icon" id="toggledone" title="Hide/show completed tasks">☑</button>
+      <button class="icon full-only" id="settingsbtn" title="Settings">&#9881;</button>
+      <button class="add" id="addbtn">+ Add</button>
+      <button class="icon" id="taskstoggle" title="Tasks">&#9776;</button>
+    </header>
+    <div id="gridwrap" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
+  </section>
+
+  <aside class="tasks" id="tasks">
+    <div class="tasks-resize" id="tasksresize" title="Drag: width · double-click: reset"></div>
+    <div class="head">
+      <b id="tasksheading">Tasks</b>
+      <select class="tabs" id="tasktabsel" title="Task tab">
+        <option value="open">Open</option>
+        <option value="done">Completed</option>
+        <option value="trash">Deleted</option>
+      </select>
+    </div>
+    <div class="body" id="tasksbody"></div>
+  </aside>
+</div>
+<dialog id="dlg"></dialog>
+<script src="static/app.js?v=22"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Minimal, standalone deployment. Nothing outside this file is required.
+services:
+  caltask:
+    build: .
+    container_name: caltask
+    restart: always
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Europe/Berlin
+      - LANG_UI=en          # en | tr
+      - FIRST_WEEKDAY=0     # 0 = Monday, 6 = Sunday
+      # - AUTH_TOKEN=...    # optional: protect the UI and API
+      # - FEED_TOKEN=...    # optional: require ?token=... on the .ics feeds

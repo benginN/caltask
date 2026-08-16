@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# Data directory — never committed, whatever it is mounted as.
+data/
+veri/
+*.db
+*.db-shm
+*.db-wal
+
+.venv/
+node_modules/
+*.yedek-*
