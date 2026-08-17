@@ -587,3 +587,89 @@ select.tabs:focus{border-color:var(--accent)}
 
 /* a lone label gets the full corner width (was clipped to "G…") */
 .grid-head .corner .tzl:only-child{max-width:100%}
+
+
+/* ══ TOUCH & PHONE OVERHAUL ══
+   Interaction model on touch: long press arms drags, plain taps open
+   cards, the browser owns scrolling. The CSS side: pan-y on the grid so
+   vertical scroll stays native (horizontal is ours: swipe = page turn),
+   plus honest finger-sized targets. */
+
+body{-webkit-tap-highlight-color:transparent}
+.scroll{touch-action:pan-y;overscroll-behavior:contain}
+.daycol,.mcell,.allday .cell,.grid-head .dayhead{touch-action:pan-y}
+.tasks .body{overscroll-behavior:contain}
+.ev,.ev.chip,.task,.trow{-webkit-touch-callout:none}
+.ev .rs{touch-action:none}
+
+/* long press armed a drag: the item visibly "lifts" */
+.ev.armed{transform:scale(1.04);box-shadow:0 8px 22px rgba(0,0,0,.5);
+  filter:brightness(1.2);z-index:30;transition:transform .12s}
+
+/* drawer scrim (phone/tablet): tap outside the task drawer closes it */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:19}
+
+/* finger-sized targets on touch screens (hover: none = no mouse) */
+@media (pointer:coarse){
+  .ev .rs{height:18px;bottom:-8px}
+  .task .x{opacity:.55;padding:2px 7px;font-size:14px}
+  .cbx{width:18px;height:18px}
+  .cbx.on::after{font-size:12px;line-height:15px}
+  .task input[type=checkbox]{width:19px;height:19px}
+  .task input[type=checkbox]:checked::after{font-size:12px;line-height:16px}
+  label.chk input[type=checkbox]{width:20px;height:20px}
+  label.chk input[type=checkbox]:checked::after{font-size:13px;line-height:17px}
+  .pal{width:26px;height:26px}
+  .byday{padding:7px 12px;font-size:13px}
+  .remchip{padding:5px 11px;font-size:12.5px}
+  .task{padding:8px 4px}
+  .trow{padding:8px 4px}
+  .arow{padding:8px 7px}
+  .scopeopt{padding:12px 10px}
+  .allday{min-height:30px}
+  .allday.kapali{max-height:32px}
+  .allday .lbl{padding:7px 5px}
+  .timeclear{padding:6px 10px;font-size:13px}
+}
+
+/* phone bottom sheet: create window + detail cards slide up from the
+   bottom, full width, above the home-indicator safe area */
+#dlg.sheet{position:fixed;left:0;right:0;bottom:0;top:auto;margin:0;
+  width:100%;max-width:100%;border-radius:16px 16px 0 0;border-bottom:0;
+  padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+  max-height:85vh;max-height:85dvh;overflow-y:auto;
+  box-shadow:0 -12px 40px rgba(0,0,0,.5)}
+#dlg.sheet::backdrop{background:rgba(0,0,0,.35)}
+#dlg.sheet .dlg-grip{display:none}
+
+@media (max-width:700px){
+  /* 16px inputs: below that iOS zooms the whole page on focus */
+  label.f input,label.f select,label.f textarea,.titlerow input#c-title,
+  .newtask input,.searchwrap input,select.views,select.tabs{font-size:16px}
+  /* honest button sizes in the header */
+  .nav button,.icon{padding:7px 10px;min-height:38px}
+  .nav .today{padding:7px 11px;font-size:13px}
+  select.views{padding:7px 8px}
+  dialog menu button{padding:10px 16px;font-size:15px}
+  #scopedlg menu button{padding:10px 16px;font-size:15px}
+  .kart-eylem button{padding:8px 12px;font-size:17px}
+  .impbtn{padding:11px 12px}
+  /* + becomes a floating action button at the thumb (full page only —
+     the dashboard embed keeps it in its bar) */
+  body:not(.compact) .add{position:fixed;right:16px;
+    bottom:calc(20px + env(safe-area-inset-bottom));z-index:18;
+    width:56px;height:56px;border-radius:50%;padding:0;
+    font-size:28px;font-weight:500;line-height:1;
+    box-shadow:0 8px 24px rgba(0,0,0,.45)}
+  /* modal dialogs (edit forms, settings, scope) sit near the bottom too */
+  dialog:not(.sheet):not(.movable):not(.pop){margin:auto 8px calc(12px + env(safe-area-inset-bottom));
+    width:calc(100vw - 16px);max-height:80vh;max-height:80dvh;overflow-y:auto}
+  /* search works on phones: the icon opens a full-width overlay bar */
+  body:not(.compact) .searchwrap{display:flex}
+  .searchwrap.acik input{position:fixed;left:10px;right:10px;width:auto;
+    top:calc(8px + env(safe-area-inset-top));z-index:71;padding:10px 12px}
+  .searchwrap #searchresults{position:fixed;left:10px;right:10px;width:auto;
+    top:calc(56px + env(safe-area-inset-top));max-height:55vh;max-height:55dvh;z-index:71}
+  /* undo toast clears the FAB */
+  #toast{bottom:calc(88px + env(safe-area-inset-bottom))}
+}

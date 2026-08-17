@@ -719,6 +719,146 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       JS.includes("api/tasks/${t.id}/skip") && JS.includes('occ_date: t.due_date'));
   }
 
+  console.log('\n── TELEFON: dokunuş modeli (uzun basış / dokunuş / kaydırma ayrımı) ──');
+  {
+    // fare: bos yere tiklamak ESKISI GIBI olustur penceresini acar
+    const { d, w } = await kur();
+    const col = d.querySelectorAll('.daycol')[1];
+    const pd = new w.Event('pointerdown', { bubbles: true });
+    pd.clientX = 300; pd.clientY = 200; pd.button = 0;
+    col.dispatchEvent(pd);
+    const pu = new w.Event('pointerup'); pu.clientX = 300; pu.clientY = 200;
+    w.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('fare: boş yere tık → oluştur penceresi açılır (masaüstü değişmedi)',
+      d.querySelector('#dlg').hasAttribute('open') && d.querySelector('#c-title') !== null);
+    d.querySelector('#dlg').close();
+  }
+  {
+    // dokunmatik: bos yere DUZ DOKUNUS hicbir sey acmaz (+ ya da uzun basis)
+    const { d, w } = await kur();
+    const col = d.querySelectorAll('.daycol')[1];
+    const pd = new w.Event('pointerdown', { bubbles: true });
+    pd.clientX = 300; pd.clientY = 200; pd.button = 0; pd.pointerType = 'touch';
+    col.dispatchEvent(pd);
+    const pu = new w.Event('pointerup'); pu.clientX = 300; pu.clientY = 200; pu.pointerType = 'touch';
+    w.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('dokunuş: boş yere düz dokunuş HİÇBİR ŞEY açmaz',
+      !d.querySelector('#dlg').hasAttribute('open'));
+  }
+  {
+    // SIZINTI REGRESYONU: kaydirma pointercancel'la biterse dinleyiciler
+    // kalkmali — bir SONRAKI dokunusun pointerup'i olustur penceresi ACMAMALI
+    // ("hangi tusa bassam ekle gibi davraniyor"un kok nedeni buydu)
+    const { d, w } = await kur();
+    const col = d.querySelectorAll('.daycol')[1];
+    const pd = new w.Event('pointerdown', { bubbles: true });
+    pd.clientX = 300; pd.clientY = 200; pd.button = 0; pd.pointerType = 'touch';
+    col.dispatchEvent(pd);
+    const pc = new w.Event('pointercancel'); pc.pointerType = 'touch';
+    w.dispatchEvent(pc);
+    const pu = new w.Event('pointerup'); pu.clientX = 40; pu.clientY = 40; pu.pointerType = 'touch';
+    w.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('kaydırma iptalinden SONRAKİ dokunuş pencere açmaz (dinleyici sızıntısı kapandı)',
+      !d.querySelector('#dlg').hasAttribute('open'));
+    bekle('iptal sonrası dragging sınıfı kalmadı', !d.body.classList.contains('dragging'));
+  }
+  {
+    // dokunmatik: UZUN BASIS bos yerde olustur penceresini acar (secim kutusuyla)
+    const { d, w, tk } = await kur();
+    const col = d.querySelectorAll('.daycol')[1];
+    const pd = new w.Event('pointerdown', { bubbles: true });
+    pd.clientX = 300; pd.clientY = 200; pd.button = 0; pd.pointerType = 'touch';
+    col.dispatchEvent(pd);
+    await new Promise((r) => setTimeout(r, 450));   // > LONG_PRESS_MS
+    const pu = new w.Event('pointerup'); pu.clientX = 300; pu.clientY = 200; pu.pointerType = 'touch';
+    w.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('dokunuş: uzun basış → oluştur penceresi açıldı',
+      d.querySelector('#dlg').hasAttribute('open') && d.querySelector('#c-title') !== null);
+    bekle('uzun basış önizlemesi sabitlendi', tk.S.preview !== null);
+    d.querySelector('#dlg').close();
+  }
+  {
+    // dokunmatik: etkinlige DUZ DOKUNUS karti acar; erken hareket surukleme baslatmaz
+    const { d, w } = await kur();
+    const ev1 = d.querySelectorAll('.daycol')[0].querySelector('.ev');
+    let pd = new w.Event('pointerdown'); pd.clientX = 100; pd.clientY = 100; pd.button = 0; pd.pointerType = 'touch';
+    ev1.dispatchEvent(pd);
+    let pu = new w.Event('pointerup'); pu.clientX = 100; pu.clientY = 100; pu.pointerType = 'touch';
+    ev1.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('dokunuş: etkinliğe dokununca KART açılır',
+      d.querySelector('#dlg').hasAttribute('open') && d.querySelector('#cardform') !== null);
+    d.querySelector('#dlg').close();
+    await new Promise((r) => setTimeout(r, 10));
+    // erken hareket = kaydirma: mod iptal, kart da acilmaz
+    const ev2 = d.querySelectorAll('.daycol')[0].querySelector('.ev');
+    pd = new w.Event('pointerdown'); pd.clientX = 100; pd.clientY = 100; pd.button = 0; pd.pointerType = 'touch';
+    ev2.dispatchEvent(pd);
+    const pm = new w.Event('pointermove'); pm.clientX = 100; pm.clientY = 140; pm.pointerType = 'touch';
+    ev2.dispatchEvent(pm);
+    pu = new w.Event('pointerup'); pu.clientX = 100; pu.clientY = 160; pu.pointerType = 'touch';
+    ev2.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 450));
+    bekle('dokunuş: uzun basıştan ÖNCE hareket = kaydırma, sürükleme/kart yok',
+      !d.querySelector('#dlg').hasAttribute('open') && !ev2.classList.contains('armed'));
+  }
+  {
+    // yatay kaydirma (swipe) gorunumu cevirir
+    const { d, w, cagrilar } = await kur();
+    const onceki = cagrilar.filter((u) => u.includes('api/range')).pop();
+    const col = d.querySelectorAll('.daycol')[3];
+    const pd = new w.Event('pointerdown', { bubbles: true });
+    pd.clientX = 320; pd.clientY = 300; pd.button = 0; pd.pointerType = 'touch';
+    col.dispatchEvent(pd);
+    // pointerup gercekte elemandan document'e kopurur (window'a degil dispatch)
+    const pu = new w.Event('pointerup', { bubbles: true });
+    pu.clientX = 120; pu.clientY = 310; pu.pointerType = 'touch';
+    col.dispatchEvent(pu);
+    await new Promise((r) => setTimeout(r, 40));
+    const sonraki = cagrilar.filter((u) => u.includes('api/range')).pop();
+    bekle('sola kaydırma → SONRAKİ haftaya geçti', sonraki !== onceki
+      && sonraki.includes(`start=${iso(ekle(PZT, 7))}`), sonraki);
+    bekle('kaydırma pencere açmadı', !d.querySelector('#dlg').hasAttribute('open'));
+  }
+  {
+    const { tk } = await kur();
+    bekle('swipeIntent: hızlı yatay hareket kaydırmadır', tk.swipeIntent(-120, 20, 300) === true);
+    bekle('swipeIntent: dikey baskın hareket kaydırma DEĞİL', tk.swipeIntent(-80, 70, 300) === false);
+    bekle('swipeIntent: kısa hareket kaydırma değil', tk.swipeIntent(-40, 5, 300) === false);
+    bekle('swipeIntent: yavaş hareket kaydırma değil', tk.swipeIntent(-120, 5, 900) === false);
+    bekle('pinchScale: parmaklar açılınca saat büyür', tk.pinchScale(44, 100, 200) === 88);
+    bekle('pinchScale: parmaklar kapanınca küçülür ve 18\'de durur', tk.pinchScale(44, 200, 50) === 18);
+    bekle('pinchScale: oran korunur', tk.pinchScale(40, 100, 150) === 60);
+  }
+  {
+    const CSSM = fs.readFileSync(path.join(KOK, 'style.css'), 'utf8');
+    bekle('ızgara dikey kaydırmayı tarayıcıya bırakır (touch-action:pan-y)',
+      CSSM.includes('.scroll{touch-action:pan-y') && CSSM.includes('.daycol,.mcell,.allday .cell'));
+    bekle('telefonda pencereler ALT SAYFA (bottom sheet)', CSSM.includes('#dlg.sheet{position:fixed;left:0;right:0;bottom:0'));
+    bekle('telefonda + düğmesi FAB (başparmak menzili)', CSSM.includes('body:not(.compact) .add{position:fixed'));
+    bekle('telefonda girişler 16px (iOS odak zumu biter)', CSSM.includes('select.tabs{font-size:16px}'));
+    bekle('çekmece perdesi stili var (#scrim)', CSSM.includes('#scrim{position:fixed;inset:0'));
+    bekle('kaba işaretçide parmak boyu hedefler (pointer:coarse)', CSSM.includes('@media (pointer:coarse)'));
+    bekle('uzun basış görsel geri bildirimi (.ev.armed)', CSSM.includes('.ev.armed{transform:scale'));
+    bekle('telefonda arama geri geldi (tam genişlik kaplama)',
+      CSSM.includes('.searchwrap.acik input{position:fixed'));
+    bekle('boyutlandırma tutamağı dokunmada büyük', CSSM.includes('.ev .rs{height:18px'));
+    bekle('bildirim FAB\'ın üstünde', CSSM.includes('#toast{bottom:calc(88px'));
+    bekle('dokunuşta mavi vurgu yok', CSSM.includes('-webkit-tap-highlight-color:transparent'));
+    bekle('sürükleme sırasında kaydırma bastırılır (touchmove engeli)',
+      JS.includes("document.addEventListener('touchmove'") && JS.includes('_touchDragging) ev.preventDefault()'));
+    bekle('oluşturma sürüklemesi pointercancel dinliyor',
+      JS.includes("window.addEventListener('pointercancel', iptal)"));
+    bekle('telefonda oluşturma penceresi alt sayfaya döner (makeMovable kapısı)',
+      JS.includes('window.innerWidth <= PHONE_W) { sheetCard(dlg); return; }'));
+    bekle('görev çekmecesi perdesi JS\'te', JS.includes("s.id = 'scrim'"));
+    bekle('iki parmak pinch zoom bağlı', JS.includes('function pinchTick') && JS.includes('_tp.size === 2'));
+  }
+
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
   process.exit(kaldi ? 1 : 0);
 })();

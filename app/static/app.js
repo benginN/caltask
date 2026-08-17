@@ -359,10 +359,12 @@ function renderTimeGrid() {
     const up = () => {
       window.removeEventListener('pointermove', mv);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       if (oynadi) { applyHourH(currentHourH()); render(); }
     };
     window.addEventListener('pointermove', mv);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     ev.preventDefault();
   });
   grid.appendChild(hours);
@@ -747,6 +749,101 @@ function dropPoint(geom, clientX, clientY) {
 
 const DRAG_MIN_PX = 4;
 
+/* ── touch model (phone) ──────────────────────────────────────────────────
+   With a mouse, click = open and drag = move, and the two never collide.
+   On touch the same finger is ALSO the scroll tool, so every grid gesture
+   is gated by a LONG PRESS: hold still ~⅓s to arm a drag (the item lifts,
+   a selection box appears), otherwise the browser scrolls as normal.
+   A plain tap opens cards; a plain tap on EMPTY grid does nothing — stray
+   taps kept opening the create window, which is what made the phone feel
+   broken. Creating on a phone = the + button or a long press on a slot.
+
+   Two extra phone gestures: horizontal swipe on the grid pages the view,
+   and a two-finger vertical pinch changes the hour height (zoom). */
+const LONG_PRESS_MS = 360;
+const TOUCH_SLOP = 9;                 // finger wobble a long press tolerates
+const isTouch = (ev) => ev.pointerType === 'touch';
+let _touchDragging = false;           // an armed touch drag / pinch is live
+// touch-action can't change mid-gesture: while a drag is armed, the scroll
+// is suppressed here so pointermove keeps flowing to the drag handlers.
+document.addEventListener('touchmove', (ev) => {
+  if (_touchDragging) ev.preventDefault();
+}, { passive: false });
+function buzz() { try { navigator.vibrate && navigator.vibrate(10); } catch { } }
+
+const _tp = new Map();                // live touch points (pinch + guards)
+const _swipe = { on: false, x0: 0, y0: 0, t0: 0, id: null };
+const _pinch = { on: false, d0: 0, h0: 44, mid0: 0, sc: null };
+
+/* pure, unit-tested: is this pointer path a page-the-view swipe? */
+function swipeIntent(dx, dy, dt) {
+  return Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.6 && dt < 600;
+}
+/* pure, unit-tested: pinch spread d0→d scales the hour height, clamped. */
+function pinchScale(h0, d0, d) {
+  return Math.max(18, Math.min(88, h0 * (d / Math.max(1, d0))));
+}
+
+function pinchTick() {
+  if (_tp.size === 2) {
+    const [a, b] = [..._tp.values()];
+    if (!_pinch.on) {
+      const sc = $('#gridwrap .scroll');
+      if (!sc || S.view === 'month' || S.view === 'agenda') return;
+      _pinch.on = true; _touchDragging = true;
+      _pinch.d0 = Math.max(30, Math.abs(a.y - b.y));
+      _pinch.h0 = currentHourH();
+      _pinch.sc = sc;
+      _pinch.mid0 = (a.y + b.y) / 2 - sc.getBoundingClientRect().top + sc.scrollTop;
+      document.body.classList.add('dragging');
+    } else {
+      const h = pinchScale(_pinch.h0, _pinch.d0, Math.max(30, Math.abs(a.y - b.y)));
+      document.documentElement.style.setProperty('--hour-h', h + 'px');
+      // the point between the fingers stays anchored while the grid scales
+      const midY = (a.y + b.y) / 2 - _pinch.sc.getBoundingClientRect().top;
+      _pinch.sc.scrollTop = _pinch.mid0 * (h / _pinch.h0) - midY;
+    }
+  } else if (_pinch.on) {
+    _pinch.on = false; _touchDragging = false;
+    document.body.classList.remove('dragging');
+    applyHourH(currentHourH()); render();
+  }
+}
+
+/* Capture-phase observers: they only watch coordinates, never call
+   preventDefault/stopPropagation, so they can't fight the drag handlers.
+   (Capture also survives the handlers' own stopPropagation calls.) */
+document.addEventListener('pointerdown', (ev) => {
+  if (!isTouch(ev)) return;
+  _tp.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  pinchTick();
+  const gw = $('#gridwrap');
+  _swipe.on = _tp.size === 1 && !!(gw && gw.contains(ev.target));
+  _swipe.x0 = ev.clientX; _swipe.y0 = ev.clientY;
+  _swipe.t0 = Date.now(); _swipe.id = ev.pointerId;
+}, true);
+document.addEventListener('pointermove', (ev) => {
+  if (!isTouch(ev) || !_tp.has(ev.pointerId)) return;
+  _tp.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (_pinch.on) pinchTick();
+}, true);
+document.addEventListener('pointerup', (ev) => {
+  if (!isTouch(ev)) return;
+  _tp.delete(ev.pointerId); pinchTick();
+  // A vertical scroll ends in pointercancel, never here — so a horizontal
+  // finger path that ends cleanly and fast is a page-turn swipe.
+  if (_swipe.on && ev.pointerId === _swipe.id && !_touchDragging) {
+    _swipe.on = false;
+    const dx = ev.clientX - _swipe.x0, dy = ev.clientY - _swipe.y0;
+    if (swipeIntent(dx, dy, Date.now() - _swipe.t0)) step(dx < 0 ? 1 : -1);
+  }
+}, true);
+document.addEventListener('pointercancel', (ev) => {
+  if (!isTouch(ev)) return;
+  _tp.delete(ev.pointerId); pinchTick();
+  if (ev.pointerId === _swipe.id) _swipe.on = false;
+}, true);
+
 /* Cross-range drag: holding the pointer at the grid's left/right edge shifts
    the drop target one full view-range back/forward (a week in week view).
    The grid is deliberately NOT rebuilt mid-drag — pointer capture dies with
@@ -797,7 +894,7 @@ function edgeFollow(shift) {   // after a shifted drop, the view follows the ite
 /* Move / resize for timed events in the grid. */
 function attachEventDrag(node, e, resizeHandle) {
   let mode = null, startX = 0, startY = 0, moved = false, geom = null;
-  let origCol = 0, startMin = 0, endMin = 0;
+  let origCol = 0, startMin = 0, endMin = 0, armed = true, pressT = null;
 
   const down = (m) => (ev) => {
     if (ev.button !== undefined && ev.button !== 0) return;
@@ -810,12 +907,28 @@ function attachEventDrag(node, e, resizeHandle) {
     origCol = Math.max(0, Math.min(geom.days - 1, Math.round((parseISO(e.starts_at.slice(0, 10)) - geom.start) / 86400000)));
     startMin = minutesOf(e.starts_at);
     endMin = Math.max(startMin + 15, minutesOf(e.ends_at) || 1440);
+    // Touch arms a MOVE via long press; the resize handle is an explicit
+    // target, so it arms immediately.
+    armed = !isTouch(ev) || m === 'resize';
+    clearTimeout(pressT);
+    if (!armed) pressT = setTimeout(() => {
+      if (!mode || _tp.size > 1) return;
+      armed = true; _touchDragging = true;
+      node.classList.add('armed'); buzz();
+    }, LONG_PRESS_MS);
     node.setPointerCapture && ev.pointerId !== undefined && node.setPointerCapture(ev.pointerId);
     ev.stopPropagation();
     if (m === 'resize') ev.preventDefault();
   };
   const move = (ev) => {
     if (!mode) return;
+    if (!armed) {
+      // finger moved before the long press → the user is scrolling
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > TOUCH_SLOP) {
+        clearTimeout(pressT); mode = null;
+      }
+      return;
+    }
     if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_MIN_PX) return;
     moved = true;
     document.body.classList.add('dragging');
@@ -834,6 +947,7 @@ function attachEventDrag(node, e, resizeHandle) {
     }
   };
   const up = async (ev) => {
+    clearTimeout(pressT); _touchDragging = false; node.classList.remove('armed');
     const wasMode = mode, wasMoved = moved;
     mode = null;
     document.body.classList.remove('dragging');
@@ -864,7 +978,7 @@ function attachEventDrag(node, e, resizeHandle) {
   resizeHandle.addEventListener('pointerdown', down('resize'));
   node.addEventListener('pointermove', move);
   node.addEventListener('pointerup', up);
-  node.addEventListener('pointercancel', () => { mode = null; node.classList.remove('drag'); node.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
+  node.addEventListener('pointercancel', () => { clearTimeout(pressT); _touchDragging = false; node.classList.remove('armed'); mode = null; node.classList.remove('drag'); node.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
 }
 
 /* Resize-only handle: the bottom edge of a multi-day event's LAST segment. */
@@ -882,29 +996,48 @@ function attachResizeOnly(handle, e) {
       son = Math.max(15, dropPoint(geom, e2.clientX, e2.clientY).mins);
       document.body.classList.add('dragging');
     };
-    const up = async () => {
+    const birak = () => {
       window.removeEventListener('pointermove', mv);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', iptal);
       document.body.classList.remove('dragging');
+    };
+    const up = async () => {
+      birak();
       if (son === null) return;
       await commitEventTimeChange(e, e.starts_at, dtStr(dayKey, Math.min(1439, son)), T.resized);
     };
+    const iptal = () => birak();
     window.addEventListener('pointermove', mv);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', iptal);
   });
 }
 
 /* All-day event chips + month cells: horizontal day-to-day drag. */
 function attachChipDrag(n, e) {
-  let down = null, moved = false;
+  let down = null, moved = false, armed = true, pressT = null;
   n.addEventListener('pointerdown', (ev) => {
     if (ev.button !== undefined && ev.button !== 0) return;
     down = { x: ev.clientX, y: ev.clientY }; moved = false;
+    armed = !isTouch(ev);
+    clearTimeout(pressT);
+    if (!armed) pressT = setTimeout(() => {
+      if (!down || _tp.size > 1) return;
+      armed = true; _touchDragging = true;
+      n.classList.add('armed'); buzz();
+    }, LONG_PRESS_MS);
     n.setPointerCapture && ev.pointerId !== undefined && n.setPointerCapture(ev.pointerId);
     ev.stopPropagation();
   });
   n.addEventListener('pointermove', (ev) => {
     if (!down) return;
+    if (!armed) {
+      if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > TOUCH_SLOP) {
+        clearTimeout(pressT); down = null;
+      }
+      return;
+    }
     if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) >= DRAG_MIN_PX) {
       moved = true; n.classList.add('drag'); document.body.classList.add('dragging');
       markDropCell(ev.clientX, ev.clientY);
@@ -912,6 +1045,7 @@ function attachChipDrag(n, e) {
     }
   });
   n.addEventListener('pointerup', async (ev) => {
+    clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed');
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); document.body.classList.remove('dragging');
@@ -928,19 +1062,32 @@ function attachChipDrag(n, e) {
     const en = e.all_day ? endDate : dtStr(endDate, minutesOf(e.ends_at));
     await commitEventTimeChange(e, s, en, T.moved);
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
+  n.addEventListener('pointercancel', () => { clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed'); down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
 }
 
 function attachTaskChipDrag(n, t) {
-  let down = null, moved = false;
+  let down = null, moved = false, armed = true, pressT = null;
   n.addEventListener('pointerdown', (ev) => {
     if (ev.button !== undefined && ev.button !== 0) return;
     down = { x: ev.clientX, y: ev.clientY }; moved = false;
+    armed = !isTouch(ev);
+    clearTimeout(pressT);
+    if (!armed) pressT = setTimeout(() => {
+      if (!down || _tp.size > 1) return;
+      armed = true; _touchDragging = true;
+      n.classList.add('armed'); buzz();
+    }, LONG_PRESS_MS);
     n.setPointerCapture && ev.pointerId !== undefined && n.setPointerCapture(ev.pointerId);
     ev.stopPropagation();
   });
   n.addEventListener('pointermove', (ev) => {
     if (!down) return;
+    if (!armed) {
+      if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > TOUCH_SLOP) {
+        clearTimeout(pressT); down = null;
+      }
+      return;
+    }
     if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) >= DRAG_MIN_PX) {
       moved = true; n.classList.add('drag'); document.body.classList.add('dragging');
       markDropCell(ev.clientX, ev.clientY);
@@ -948,6 +1095,7 @@ function attachTaskChipDrag(n, t) {
     }
   });
   n.addEventListener('pointerup', async (ev) => {
+    clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed');
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); document.body.classList.remove('dragging');
@@ -977,21 +1125,34 @@ function attachTaskChipDrag(n, t) {
     });
     load();
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
+  n.addEventListener('pointercancel', () => { clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed'); down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
 }
 
 /* Drag a timed-task block on the grid: day and time change together. */
 function attachTaskGridDrag(n, t) {
-  let down = null, moved = false, geom = null;
+  let down = null, moved = false, geom = null, armed = true, pressT = null;
   n.addEventListener('pointerdown', (ev) => {
     if (ev.button !== undefined && ev.button !== 0) return;
     down = { x: ev.clientX, y: ev.clientY }; moved = false;
     geom = gridGeom();
+    armed = !isTouch(ev);
+    clearTimeout(pressT);
+    if (!armed) pressT = setTimeout(() => {
+      if (!down || _tp.size > 1) return;
+      armed = true; _touchDragging = true;
+      n.classList.add('armed'); buzz();
+    }, LONG_PRESS_MS);
     n.setPointerCapture && ev.pointerId !== undefined && n.setPointerCapture(ev.pointerId);
     ev.stopPropagation();
   });
   n.addEventListener('pointermove', (ev) => {
     if (!down || !geom) return;
+    if (!armed) {
+      if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > TOUCH_SLOP) {
+        clearTimeout(pressT); down = null;
+      }
+      return;
+    }
     if (!moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) < DRAG_MIN_PX) return;
     moved = true;
     n.classList.add('drag'); document.body.classList.add('dragging');
@@ -1006,6 +1167,7 @@ function attachTaskGridDrag(n, t) {
     edgeTrack(ev.clientX, ev.clientY);
   });
   n.addEventListener('pointerup', async (ev) => {
+    clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed');
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); n.style.transform = '';
@@ -1039,7 +1201,7 @@ function attachTaskGridDrag(n, t) {
     });
     load();
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); n.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
+  n.addEventListener('pointercancel', () => { clearTimeout(pressT); _touchDragging = false; n.classList.remove('armed'); down = null; moved = false; n.classList.remove('drag'); n.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
 }
 
 let _dropCell = null;
@@ -1085,9 +1247,11 @@ function dragCreateStart(ev, col, key) {
   if (ev.target.closest('.ev')) return;      // event drags handle themselves
   const geom = gridGeom();
   if (!geom) return;
+  const touch = isTouch(ev);
   const startCol = +col.dataset.col;
   const m0 = snap15(((ev.clientY - geom.rect.top) / geom.hourH) * 60);
   let selBoxes = [], endM = m0 + 30, endCol = startCol, movedFar = false;
+  let armed = !touch, pressT = null;
   const startY = ev.clientY, startX = ev.clientX;
   const grid = $('#timegrid');
 
@@ -1122,7 +1286,22 @@ function dragCreateStart(ev, col, key) {
       });
     }
   };
+  // EVERY exit path drops the window listeners — pointercancel included.
+  // (They used to leak when a touch scroll cancelled the gesture, and the
+  // NEXT tap's pointerup — wherever it landed — opened the create window.)
+  const birak = () => {
+    clearTimeout(pressT);
+    _touchDragging = false;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', iptal);
+  };
   const move = (e2) => {
+    if (!armed) {
+      // touch: a move before the long press is a scroll/swipe, not a create
+      if (Math.hypot(e2.clientX - startX, e2.clientY - startY) > TOUCH_SLOP) birak();
+      return;
+    }
     if (!movedFar && Math.abs(e2.clientY - startY) < 6 && Math.abs(e2.clientX - startX) < 6) return;
     movedFar = true;
     const p = dropPoint(geom, e2.clientX, e2.clientY);
@@ -1131,10 +1310,10 @@ function dragCreateStart(ev, col, key) {
     boya();
   };
   const up = () => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
+    birak();
     document.body.classList.remove('dragging');
     temizle();
+    if (touch && !armed) return;   // plain tap on a phone: nothing (use + / long press)
     const sabitle = (segs) => {
       S.preview = { segs };
       render();                 // paint the pinned preview (cleared on close)
@@ -1153,14 +1332,29 @@ function dragCreateStart(ev, col, key) {
         openCreate({ date: key, time: hm(Math.min(m0, endM)), endTime: hm(Math.max(m0 + 15, endM)) });
       }
     } else {
-      // plain click: half-hour slot under the cursor, previewed as well
-      const half = Math.floor(m0 / 30) * 30;
-      sabitle([{ date: key, from: half, to: half + 30 }]);
-      openCreate({ date: key, time: hm(half) });
+      // plain mouse click: half-hour slot under the cursor; a long press
+      // keeps the exact slot its feedback box showed
+      const from = touch ? m0 : Math.floor(m0 / 30) * 30;
+      sabitle([{ date: key, from, to: from + 30 }]);
+      openCreate({ date: key, time: hm(from) });
     }
   };
+  const iptal = () => {          // the browser took the gesture (scroll)
+    birak();
+    document.body.classList.remove('dragging');
+    temizle();
+  };
+  if (touch) {
+    pressT = setTimeout(() => {
+      if (_tp.size > 1) return;
+      armed = true; _touchDragging = true;
+      buzz();
+      boya();                    // instant feedback: the selection box appears
+    }, LONG_PRESS_MS);
+  }
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', iptal);
 }
 
 /* Commit a drag-driven time change, asking scope for recurring events. */
@@ -1489,15 +1683,28 @@ const pickedDays = (dlg, id) => $$(`#${id} .byday.sel`, dlg).map((b) => b.datase
    visible behind it. Other dialogs remain modal — they reset the position
    and class before opening. */
 function resetDlg(dlg) {
-  dlg.classList.remove('movable', 'pop');
+  dlg.classList.remove('movable', 'pop', 'sheet');
   dlg.style.left = dlg.style.top = '';
   dlg.onclick = null;
+}
+/* Phone: cards and the create window become a fixed BOTTOM SHEET —
+   thumb-reachable, never half off-screen; tapping the dim area closes. */
+const PHONE_W = 700;
+function sheetCard(dlg) {
+  dlg.classList.add('sheet');
+  dlg.onclick = (ev) => {
+    if (ev.target !== dlg) return;
+    const b = dlg.getBoundingClientRect();
+    if (ev.clientX < b.left || ev.clientX > b.right
+        || ev.clientY < b.top || ev.clientY > b.bottom) dlg.close();
+  };
 }
 /* Google-style anchored preview: the card sits NEXT TO the clicked chip or
    block — on its right when there is room, otherwise on its left — instead
    of a centered modal.  Narrow screens keep the centered modal (no side to
    sit on).  Call AFTER showModal(): the card must be laid out to measure. */
 function anchorCard(dlg, ref) {
+  if (window.innerWidth <= PHONE_W) { sheetCard(dlg); return; }   // phone: bottom sheet
   if (!ref || !ref.getBoundingClientRect || window.innerWidth < 600) return;
   dlg.classList.add('pop');
   const r = ref.getBoundingClientRect();
@@ -1518,6 +1725,9 @@ function anchorCard(dlg, ref) {
   };
 }
 function makeMovable(dlg, grip) {
+  // Phones: a floating draggable window is useless under a thumb and kept
+  // remembering desktop coordinates — it becomes a bottom sheet instead.
+  if (window.innerWidth <= PHONE_W) { sheetCard(dlg); return; }
   dlg.classList.add('movable');
   const key = LSK('dlg-pos');
   const kayit = (LS.get(key, '') || '').split(',');
@@ -1536,10 +1746,12 @@ function makeMovable(dlg, grip) {
     const up = () => {
       window.removeEventListener('pointermove', mv);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       LS.set(key, `${Math.round(x)},${Math.round(y)}`);
     };
     window.addEventListener('pointermove', mv);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     ev.preventDefault();
   });
 }
@@ -1549,6 +1761,7 @@ function makeMovable(dlg, grip) {
    exactly as easy as adding an event. */
 function openCreate(preset) {
   const dlg = $('#dlg');
+  resetDlg(dlg);
   const p = preset || {};
   const gun = p.date || S.data.today;
   const saat = p.time || `${pad(new Date().getHours())}:00`;
@@ -2355,8 +2568,22 @@ function setView(v) {
   if (si) si.placeholder = T.searchPh;
   wireSearch();
 
+  // On narrow screens the task drawer overlays the grid; a scrim behind it
+  // dims the calendar and closes the drawer on a tap outside (phone drawer
+  // convention — the ☰ button was the only way out before).
+  const drawer = (ac) => {
+    const p = $('#tasks');
+    p.hidden = !ac;
+    const eski = $('#scrim');
+    if (eski) eski.remove();
+    if (ac && !S.compact && window.innerWidth < 900) {
+      const s = el('div'); s.id = 'scrim';
+      s.onclick = () => drawer(false);
+      document.body.appendChild(s);
+    }
+  };
   const tt = $('#taskstoggle');
-  if (tt) tt.onclick = () => { const p = $('#tasks'); p.hidden = !p.hidden; };
+  if (tt) tt.onclick = () => drawer($('#tasks').hidden);
   const th = $('#tasksheading');
   if (th) th.textContent = T.tasks;
 
@@ -2443,4 +2670,4 @@ function setView(v) {
 })();
 
 /* test hooks (jsdom) — not used by the app itself */
-window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, tzOffsetLabel, tzHour, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH };
+window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, tzOffsetLabel, tzHour, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH, swipeIntent, pinchScale };
