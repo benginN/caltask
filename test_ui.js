@@ -653,6 +653,20 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       CSS2.includes('.kart-eylem button') && !CSS2.includes('kart-not-buyuk') && !JS.includes('kart-not-buyuk'));
     bekle('kart isaretlemesi de geri-al yolundan gecer',
       JS.includes('if (ev2.target.checked && !t.done) { await toggleTask(t); return; }'));
+
+    // 17 Agu tur 6: kart tiklanan ogeye YAPISIK acilir (Google gibi)
+    bekle('anchorCard var ve showModal SONRASI cagriliyor',
+      JS.includes('function anchorCard(dlg, ref)')
+      && JS.includes('dlg.showModal();\n  anchorCard(dlg, ref);'));
+    bekle('sag tarafa sigmazsa SOLA gecer', JS.includes('x = r.left - 10 - c.width'));
+    bekle('dar ekranda ortali modal kalir', JS.includes("window.innerWidth < 600) return"));
+    bekle('pop CSS: sabit konum + saydam fon',
+      CSS2.includes('#dlg.pop{position:fixed;margin:0') && CSS2.includes('#dlg.pop::backdrop{background:transparent}'));
+    bekle('disari tiklayinca kapanir (yalniz backdrop/padding hedefi)',
+      JS.includes('if (ev.target !== dlg) return;'));
+    bekle('eylem dugmeleri yukseldi', CSS2.includes('padding:6px 10px;font-size:15px'));
+    bekle('tum kart cagrilari referans gecirir',
+      !JS.includes('openTaskCard(t);') && !JS.includes('openEventCard(e);'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

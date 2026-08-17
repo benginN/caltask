@@ -501,7 +501,7 @@ function eventNode(e, seg) {
   } else {
     // Continuation segment: click opens the card; the last one can be
     // resized from its bottom edge.
-    n.onclick = (ev) => { ev.stopPropagation(); openEventCard(e); };
+    n.onclick = (ev) => { ev.stopPropagation(); openEventCard(e, n); };
     if (seg.sonda) {
       const rs = el('div', 'rs');
       n.appendChild(rs);
@@ -583,7 +583,7 @@ function taskChip(t) {
     const ct = el('span', 'ct'); ct.textContent = t.title;
     p.appendChild(ct);
     p.title = `${t.title} · ${T.projected}`;
-    p.onclick = (ev) => { ev.stopPropagation(); openTaskCard(t); };
+    p.onclick = (ev) => { ev.stopPropagation(); openTaskCard(t, p); };
     return p;
   }
   const n = el('div', 'ev chip task' + (t.done ? ' done' : ''));
@@ -605,7 +605,7 @@ function taskGridNode(t) {
     const tt = el('span', 't'); tt.textContent = t.title;
     p.appendChild(tt);
     p.title = `${t.title} · ${T.projected}`;
-    p.onclick = (ev) => { ev.stopPropagation(); openTaskCard(t); };
+    p.onclick = (ev) => { ev.stopPropagation(); openTaskCard(t, p); };
     return p;
   }
   const n = el('div', 'ev taskev' + (t.done ? ' done' : ''));
@@ -697,7 +697,7 @@ function renderAgenda() {
       when.textContent = e.all_day ? T.allday : `${e.starts_at.slice(11, 16)} – ${e.ends_at.slice(11, 16)}`;
       const ttl = el('span', 'attl'); ttl.textContent = (e.recurring ? '⟳ ' : '') + e.title;
       row.append(dot, when, ttl);
-      row.onclick = () => openEventCard(e);
+      row.onclick = () => openEventCard(e, row);
       listEl.appendChild(row);
     }
     for (const t of tds) {
@@ -706,7 +706,7 @@ function renderAgenda() {
       const when = el('span', 'awhen'); when.textContent = t.due_time || '';
       const ttl = el('span', 'attl'); ttl.textContent = t.title;
       row.append(dot, when, ttl);
-      row.onclick = () => openTaskCard(t);
+      row.onclick = () => openTaskCard(t, row);
       listEl.appendChild(row);
     }
     day.appendChild(listEl);
@@ -835,7 +835,7 @@ function attachEventDrag(node, e, resizeHandle) {
     node.style.transform = '';
     if (!wasMode) return;
     if (!wasMoved) {          // it was a click, not a drag
-      if (wasMode === 'move') { openEventCard(e); }   // read-only card first
+      if (wasMode === 'move') { openEventCard(e, node); }   // read-only card first
       return;
     }
     const shift = edgeTake();
@@ -912,7 +912,7 @@ function attachChipDrag(n, e) {
     const shift = edgeTake();
     let target = clearDropCell();
     if (!wasDown) return;
-    if (!wasMoved) { openEventCard(e); return; }
+    if (!wasMoved) { openEventCard(e, n); return; }
     if (target && shift) target = iso(addDays(parseISO(target), shift * S.data.days));
     if (!target || target === e.starts_at.slice(0, 10)) { render(); return; }
     edgeFollow(shift);
@@ -948,7 +948,7 @@ function attachTaskChipDrag(n, t) {
     const shift = edgeTake();
     let target = clearDropCell();
     if (!wasDown) return;
-    if (!wasMoved) { openTaskCard(t); return; }   // body = card; circle completes
+    if (!wasMoved) { openTaskCard(t, n); return; }   // body = card; circle completes
     if (target && shift) target = iso(addDays(parseISO(target), shift * S.data.days));
     if (!target || target === t.due_date) { render(); return; }
     edgeFollow(shift);
@@ -1007,7 +1007,7 @@ function attachTaskGridDrag(n, t) {
     const shift = edgeTake();
     document.querySelectorAll('.allday.droptarget').forEach((a) => a.classList.remove('droptarget'));
     if (!wasDown) return;
-    if (!wasMoved) { openTaskCard(t); return; }
+    if (!wasMoved) { openTaskCard(t, n); return; }
     const p = dropPoint(geom, ev.clientX, ev.clientY);
     const newDate = iso(addDays(geom.start, p.day + shift * S.data.days));
     const ust = document.elementFromPoint(ev.clientX, ev.clientY);
@@ -1366,7 +1366,7 @@ function taskRow(t, isSub) {
   const ttl = el('span', 'ttl'); ttl.textContent = t.title;
   txt.appendChild(ttl);
   if (t.due_date) txt.insertAdjacentHTML('beforeend', dueLabel(t));
-  txt.onclick = () => openTaskCard(t);
+  txt.onclick = () => openTaskCard(t, row);
   const x = el('button', 'x'); x.textContent = '✕'; x.title = T.del;
   x.onclick = () => deleteTaskFlow(t);
   row.append(cb, txt, x);
@@ -1482,8 +1482,33 @@ const pickedDays = (dlg, id) => $$(`#${id} .byday.sel`, dlg).map((b) => b.datase
    visible behind it. Other dialogs remain modal — they reset the position
    and class before opening. */
 function resetDlg(dlg) {
-  dlg.classList.remove('movable');
+  dlg.classList.remove('movable', 'pop');
   dlg.style.left = dlg.style.top = '';
+  dlg.onclick = null;
+}
+/* Google-style anchored preview: the card sits NEXT TO the clicked chip or
+   block — on its right when there is room, otherwise on its left — instead
+   of a centered modal.  Narrow screens keep the centered modal (no side to
+   sit on).  Call AFTER showModal(): the card must be laid out to measure. */
+function anchorCard(dlg, ref) {
+  if (!ref || !ref.getBoundingClientRect || window.innerWidth < 600) return;
+  dlg.classList.add('pop');
+  const r = ref.getBoundingClientRect();
+  const c = dlg.getBoundingClientRect();
+  let x = r.right + 10;
+  if (x + c.width > window.innerWidth - 8) x = r.left - 10 - c.width;
+  x = Math.max(8, Math.min(x, window.innerWidth - c.width - 8));
+  const y = Math.max(8, Math.min(r.top, window.innerHeight - c.height - 8));
+  dlg.style.left = x + 'px'; dlg.style.top = y + 'px';
+  // The backdrop is transparent in pop mode, so restore click-outside-closes.
+  // ev.target===dlg limits this to backdrop/padding hits (keyboard "clicks"
+  // land on buttons and report 0,0 — they must not close the card).
+  dlg.onclick = (ev) => {
+    if (ev.target !== dlg) return;
+    const b = dlg.getBoundingClientRect();
+    if (ev.clientX < b.left || ev.clientX > b.right
+        || ev.clientY < b.top || ev.clientY > b.bottom) dlg.close();
+  };
 }
 function makeMovable(dlg, grip) {
   dlg.classList.add('movable');
@@ -1934,7 +1959,7 @@ function repeatText(e) {
   if (e.repeat_until) t += ` · ${T.until.toLowerCase()}: ${e.repeat_until}`;
   return t;
 }
-function openEventCard(e) {
+function openEventCard(e, ref) {
   const dlg = $('#dlg');
   resetDlg(dlg);
   // One meta line: date/time · repeat; location/reminders keep their own lines.
@@ -1987,8 +2012,9 @@ function openEventCard(e) {
     openEvent(e);
   };
   dlg.showModal();
+  anchorCard(dlg, ref);
 }
-function openTaskCard(t) {
+function openTaskCard(t, ref) {
   const dlg = $('#dlg');
   resetDlg(dlg);
   const liste = (S.lists.find((l) => l.id === t.list_id) || {});
@@ -2036,6 +2062,7 @@ function openTaskCard(t) {
     openTask(t);
   };
   dlg.showModal();
+  anchorCard(dlg, ref);
 }
 
 /* ── settings (second timezone + feed URLs) ───────────────────────────── */

@@ -232,7 +232,7 @@ dialog menu .danger{color:var(--now);margin-right:auto}
 
 /* ── readable summary card at the top of dialogs ── */
 .kart{background:var(--card);border:1px solid var(--line);border-radius:10px;
-  padding:10px 12px;margin-bottom:14px}
+  padding:13px 14px;margin-bottom:14px}
 .kart-ust{display:flex;align-items:center;gap:8px;font-size:14.5px;word-break:break-word}
 .kart-nokta{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
 .kart-alt{margin-top:5px;font-size:12px;color:var(--muted)}
@@ -564,10 +564,16 @@ select.tabs:focus{border-color:var(--accent)}
 
 /* detail card: emoji actions top right, one meta line, Done bottom right */
 .kart-ust b{flex:1 1 auto;min-width:0}
-.kart-eylem{display:flex;gap:4px;flex:0 0 auto;align-self:flex-start;margin-left:auto}
-.kart-eylem button{border:1px solid var(--line);background:transparent;border-radius:7px;
-  padding:3px 8px;font-size:13.5px;line-height:1.3;cursor:pointer}
+.kart-eylem{display:flex;gap:5px;flex:0 0 auto;align-self:flex-start;margin-left:auto}
+.kart-eylem button{border:1px solid var(--line);background:transparent;border-radius:8px;
+  padding:6px 10px;font-size:15px;line-height:1.3;cursor:pointer}
 .kart-eylem button:hover{background:var(--line)}
+/* anchored preview (Google-style): fixed next to the clicked chip, no dim */
+#dlg.pop{position:fixed;margin:0;z-index:80;width:min(370px,calc(100vw - 24px));
+  box-shadow:0 16px 48px rgba(0,0,0,.55)}
+#dlg.pop::backdrop{background:transparent}
+#dlg.pop .kart{margin-bottom:0}
+#dlg.pop .kart-son{margin-top:10px}
 .kart-meta{word-break:break-word}
 .kart-son{display:flex;justify-content:flex-end;margin-top:12px}
 .kart-son .chk{margin-bottom:0}
