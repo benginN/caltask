@@ -559,8 +559,9 @@ function cbxEl(done, onToggle) {
 }
 
 /* One completion path for chips and grid blocks. Completing a REPEATING task
-   rolls it forward server-side; that jump is silent and easy to regret, so
-   it gets an Undo toast that restores the previous due date. */
+   rolls it forward server-side and leaves a done copy in the Done tab; that
+   jump is silent and easy to regret, so it gets an Undo toast that restores
+   the previous due date and hard-deletes the done copy. */
 async function toggleTask(t) {
   const oldDue = t.due_date;
   const res = await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: !t.done }) });
@@ -568,6 +569,7 @@ async function toggleTask(t) {
     const d = res.due_date;
     toast(`\u2713 \u201C${t.title}\u201D \u2192 ${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`, async () => {
       await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ due_date: oldDue }) });
+      if (res.done_id) await api(`api/tasks/${res.done_id}?hard=1`, { method: 'DELETE' });
       load();
     });
   }
@@ -1356,6 +1358,7 @@ function taskRow(t, isSub) {
   row.dataset.id = t.id;
   const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!t.done;
   cb.onchange = async () => {
+    if (cb.checked && !t.done) { await toggleTask(t); return; }
     await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: cb.checked }) });
     load();
   };

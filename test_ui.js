@@ -628,6 +628,12 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('formda saat-sil dugmesi', JS.includes('t-time-sil') && CSS2.includes('.timeclear'));
     bekle('acik tum-gun seridinde tavan yok (tam surum)',
       !CSS2.includes('max-height:66px') && CSS2.includes('body.compact .allday:not(.kapali){max-height:10rem'));
+
+    // 17 Agu tur 4: tamamlanan tekrar Bitenler'e kayit birakir
+    bekle('geri-al bitmis kopyayi KALICI siler',
+      JS.includes('res.done_id') && JS.includes('?hard=1'));
+    bekle('kenar cubugu kutusu da geri-al yolundan gecer (toggleTask)',
+      JS.includes('if (cb.checked && !t.done) { await toggleTask(t); return; }'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

@@ -572,13 +572,25 @@ async def task_update(tid: int, body: TaskIn):
 
         # Completing a repeating task rolls it forward instead of closing it —
         # the Google Tasks behaviour people expect from "every week" chores.
+        # A standalone done copy is left behind for that occurrence, so the
+        # Done tab keeps a history of WHEN each repeat was actually finished.
         if body.done and not row["done"] and row["repeat"]:
             base = row["due_date"] or today().isoformat()
+            pos = c.execute("SELECT COALESCE(MAX(position),0)+1 FROM tasks WHERE list_id=?",
+                            (row["list_id"],)).fetchone()[0]
+            done_cur = c.execute(
+                "INSERT INTO tasks(list_id,parent_id,title,notes,due_date,due_time,"
+                "position,repeat,repeat_every,repeat_days,done,done_at,uid)"
+                " VALUES (?,?,?,?,?,?,?,'',1,'',1,?,?)",
+                (row["list_id"], None, row["title"], row["notes"], base,
+                 row["due_time"], pos,
+                 datetime.now().strftime("%Y-%m-%d %H:%M"), store.new_uid("td")))
             nxt = recur.next_due(date.fromisoformat(base), row["repeat"],
                                  row["repeat_every"], recur.parse_days(row["repeat_days"]))
             c.execute("UPDATE tasks SET due_date=?, updated_at=datetime('now','localtime')"
                       " WHERE id=?", (nxt.isoformat() if nxt else None, tid))
-            return {"status": "rolled", "due_date": nxt.isoformat() if nxt else None}
+            return {"status": "rolled", "due_date": nxt.isoformat() if nxt else None,
+                    "done_id": done_cur.lastrowid}
 
         fields, args = [], []
         for name, value in (
@@ -613,11 +625,16 @@ async def task_update(tid: int, body: TaskIn):
 
 
 @app.delete("/api/tasks/{tid}")
-async def task_delete(tid: int):
+async def task_delete(tid: int, hard: int = 0):
     # Soft delete (alt gorevleriyle) — 24 saat "Silinenler"de geri alinabilir.
+    # hard=1: Undo of a rolled completion removes its done copy for real —
+    # a regretted checkmark must not linger in the trash as a ghost entry.
     with tx() as c:
-        c.execute("UPDATE tasks SET deleted_at=datetime('now','localtime')"
-                  " WHERE id=? OR parent_id=?", (tid, tid))
+        if hard:
+            c.execute("DELETE FROM tasks WHERE id=? OR parent_id=?", (tid, tid))
+        else:
+            c.execute("UPDATE tasks SET deleted_at=datetime('now','localtime')"
+                      " WHERE id=? OR parent_id=?", (tid, tid))
     return {"status": "ok"}
 
 

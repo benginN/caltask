@@ -110,6 +110,31 @@ bekle("yeni tarih 1 hafta sonrasi",
 hala = [g for g in c.get("/api/tasks").json() if g["id"] == tr_id]
 bekle("gorev acik kaldi", len(hala) == 1 and not hala[0]["done"], hala)
 
+print("\n-- tamamlanan tekrar BITENLER'e kayit birakiyor --")
+d1 = r.get("done_id")
+bekle("cevapta done_id var", isinstance(d1, int), r)
+kopya_d = [g for g in c.get("/api/tasks?include_done=1").json() if g["id"] == d1]
+bekle("bitmis kopya include_done ile goruluyor", len(kopya_d) == 1, kopya_d)
+bekle("kopya o gunun tarihiyle ve bitmis",
+      kopya_d and kopya_d[0]["done"] == 1 and kopya_d[0]["due_date"] == str(PZT), kopya_d)
+bekle("kopya tekrarsiz (bagimsiz kayit)", kopya_d and kopya_d[0]["repeat"] == "", kopya_d)
+bekle("kopya done_at damgali", kopya_d and kopya_d[0]["done_at"], kopya_d)
+
+# Geri Al yolu: tarih geri + bitmis kopya KALICI silinir (cop kutusuna dusmez)
+c.patch(f"/api/tasks/{tr_id}", json={"due_date": str(PZT)})
+c.delete(f"/api/tasks/{d1}?hard=1")
+bekle("geri alinca kopya bitenlerden kalkti",
+      not any(g["id"] == d1 for g in c.get("/api/tasks?include_done=1").json()))
+bekle("kopya cop kutusunda da YOK",
+      not any(t["id"] == d1 for t in c.get("/api/trash").json()["tasks"]))
+bekle("tarih geri geldi",
+      [g for g in c.get("/api/tasks").json() if g["id"] == tr_id][0]["due_date"] == str(PZT))
+
+# yeniden tamamla -> bolumun onceki son durumu (PZT+7) korunur
+r = c.patch(f"/api/tasks/{tr_id}", json={"title": "Haftalık kontrol", "done": True}).json()
+bekle("yeniden tamamlama yine sardi", r.get("status") == "rolled"
+      and r.get("due_date") == (PZT + timedelta(days=7)).isoformat(), r)
+
 print("\n-- .ics beslemeleri --")
 ics = c.get("/calendar.ics")
 bekle("takvim.ics HTTP 200", ics.status_code == 200)
