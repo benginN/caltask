@@ -539,5 +539,54 @@ adlar3 = [t["title"] for t in c.get("/api/tasks").json()]
 bekle("bitis sinirli kural HORTLAMADI", "Bitmis Rutin" not in adlar3, adlar3[-5:])
 bekle("stopped kural da alinmadi", "Durdurulmus Rutin" not in adlar3)
 
+print("\n-- rutin duzenleme: notlar seriyi TASIMAZ + tekrar atlama (skip_dates) --")
+rt = c.post("/api/tasks", json={"title": "Aksam rutini", "list_id": lst,
+                                "due_date": str(BUGUN), "repeat": "daily"}).json()["id"]
+c.patch(f"/api/tasks/{rt}", json={"notes": "yeni aciklama"})
+row = [t for t in c.get("/api/tasks").json() if t["id"] == rt][0]
+bekle("yalniz not degisince tarih yerinde", row["due_date"] == str(BUGUN), row)
+bekle("not kaydedildi", row["notes"] == "yeni aciklama", row)
+
+# gelecekteki tekrari sil (skip + occ_date): seri yerinde kalir, o gun atlanir
+hedef = str(BUGUN + timedelta(days=3))
+r = c.post(f"/api/tasks/{rt}/skip", json={"occ_date": hedef}).json()
+bekle("projeksiyon silinince seri TASINMADI", r.get("due_date") == str(BUGUN), r)
+rng = c.get(f"/api/range?start={BUGUN}&days=7").json()
+gunler3 = [t["due_date"] for t in rng["tasks"] if t["id"] == rt]
+bekle("atlanan gun projeksiyonlarda yok", hedef not in gunler3, gunler3)
+bekle("diger projeksiyonlar duruyor",
+      str(BUGUN + timedelta(days=2)) in gunler3, gunler3)
+
+# projeksiyona 'yalniz bu' duzenlemesi (detach + occ_date): kopya + seri yerinde
+hedef2 = str(BUGUN + timedelta(days=5))
+r = c.post(f"/api/tasks/{rt}/detach", json={
+    "due_date": hedef2, "occ_date": hedef2,
+    "title": "Aksam rutini (ozel)", "notes": "sadece bu gun"}).json()
+bekle("projeksiyon detach: seri TASINMADI", r.get("series_due_date") == str(BUGUN), r)
+kopya2 = [t for t in c.get("/api/tasks").json() if t["id"] == r["new_id"]][0]
+bekle("kopya duzenlenen alanlarla ve hedef gunde",
+      kopya2["title"] == "Aksam rutini (ozel)" and kopya2["notes"] == "sadece bu gun"
+      and kopya2["due_date"] == hedef2 and kopya2["repeat"] == "", kopya2)
+rng = c.get(f"/api/range?start={BUGUN}&days=7").json()
+o_gun = [t for t in rng["tasks"] if t["due_date"] == hedef2
+         and t["id"] in (rt, r["new_id"])]
+bekle("o gunde tek kayit: bagimsiz kopya (cift gorunum yok)",
+      len(o_gun) == 1 and o_gun[0]["id"] == r["new_id"], o_gun)
+proj = [t for t in rng["tasks"] if t.get("projected") and t["id"] == rt]
+bekle("projeksiyonlar serinin gercek vadesini tasiyor",
+      proj and all(t.get("series_due_date") == str(BUGUN) for t in proj), proj[:2])
+
+# tamamlaninca ileri sarma atlanan gunun USTUNDEN atlar
+c.post(f"/api/tasks/{rt}/skip", json={"occ_date": str(BUGUN + timedelta(days=1))})
+r = c.patch(f"/api/tasks/{rt}", json={"title": "Aksam rutini", "done": True}).json()
+bekle("ileri sarma atlanan gunu es gecti",
+      r.get("due_date") == str(BUGUN + timedelta(days=2)), r)
+
+# kural degisince atlama listesi temizlenir (eski gunler yeni kurala uymayabilir)
+c.patch(f"/api/tasks/{rt}", json={"repeat": "weekly", "repeat_days": ""})
+with _store.tx() as _c:
+    sd = _c.execute("SELECT skip_dates FROM tasks WHERE id=?", (rt,)).fetchone()[0]
+bekle("kural degisince skip_dates sifirlandi", sd == "", sd)
+
 print(f"\n=== {gecti} gecti - {kaldi} kaldi ===\n")
 sys.exit(1 if kaldi else 0)

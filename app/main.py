@@ -116,9 +116,19 @@ class ImportTasksIn(BaseModel):
 
 
 class DetachIn(BaseModel):
-    """Move ONE occurrence of a routine task without touching the series."""
+    """Move/edit ONE occurrence of a routine task without touching the series.
+    occ_date names WHICH occurrence is being detached (a future projection is
+    marked skipped; the current one rolls the series forward, as before)."""
     due_date: str
     due_time: str | None = None
+    occ_date: str | None = None
+    title: str | None = None
+    notes: str | None = None
+    list_id: int | None = None
+
+
+class SkipIn(BaseModel):
+    occ_date: str | None = None
 
 
 def today() -> date:
@@ -362,6 +372,30 @@ def _align_weekly_due(due: str | None, repeat: str, days_csv: str) -> str | None
     return due
 
 
+def _task_skips(row) -> set[str]:
+    return {s for s in (row["skip_dates"] or "").split(",") if s}
+
+
+def _roll_task_due(base: date, row) -> str | None:
+    """Next occurrence after `base`, stepping over dates the user removed or
+    detached from the series ('yalniz bu' on a projection)."""
+    skips = _task_skips(row)
+    days = recur.parse_days(row["repeat_days"])
+    nxt = recur.next_due(base, row["repeat"], row["repeat_every"], days)
+    while nxt and nxt.isoformat() in skips:
+        nxt = recur.next_due(nxt, row["repeat"], row["repeat_every"], days)
+    return nxt.isoformat() if nxt else None
+
+
+def _set_task_due(c, row, due_iso: str | None):
+    """Move the series row and prune skip entries the roll left behind."""
+    keep = ",".join(sorted(s for s in _task_skips(row)
+                           if due_iso is not None and s > due_iso))
+    c.execute("UPDATE tasks SET due_date=?, skip_dates=?,"
+              " updated_at=datetime('now','localtime') WHERE id=?",
+              (due_iso, keep, row["id"]))
+
+
 def _occ_base_start(row, occ_date: str) -> datetime:
     """The original wall-clock start of the occurrence in slot `occ_date`."""
     base = parse_dt(row["starts_at"])
@@ -553,14 +587,22 @@ async def task_detach(tid: int, body: DetachIn):
         cur = c.execute(
             "INSERT INTO tasks(list_id,parent_id,title,notes,due_date,due_time,"
             "position,repeat,repeat_every,repeat_days,uid) VALUES (?,?,?,?,?,?,?,'',1,'',?)",
-            (row["list_id"], None, row["title"], row["notes"], body.due_date,
+            (body.list_id or row["list_id"], None,
+             (body.title or row["title"]).strip()[:200],
+             row["notes"] if body.notes is None else body.notes, body.due_date,
              (body.due_time or None) if body.due_time is not None else row["due_time"],
              pos, store.new_uid("td")))
-        nxt = recur.next_due(date.fromisoformat(row["due_date"]), row["repeat"],
-                             row["repeat_every"], recur.parse_days(row["repeat_days"]))
-        c.execute("UPDATE tasks SET due_date=?, updated_at=datetime('now','localtime')"
-                  " WHERE id=?", (nxt.isoformat() if nxt else None, tid))
-    return {"new_id": cur.lastrowid, "series_due_date": nxt.isoformat() if nxt else None}
+        if body.occ_date and body.occ_date != row["due_date"]:
+            # A FUTURE projection detaches: the series itself stays where it
+            # is, that one slot is just marked skipped.
+            skips = ",".join(sorted(_task_skips(row) | {body.occ_date}))
+            c.execute("UPDATE tasks SET skip_dates=?,"
+                      " updated_at=datetime('now','localtime') WHERE id=?",
+                      (skips, tid))
+            return {"new_id": cur.lastrowid, "series_due_date": row["due_date"]}
+        nxt = _roll_task_due(date.fromisoformat(row["due_date"]), row)
+        _set_task_due(c, row, nxt)
+    return {"new_id": cur.lastrowid, "series_due_date": nxt}
 
 
 @app.patch("/api/tasks/{tid}")
@@ -585,11 +627,9 @@ async def task_update(tid: int, body: TaskIn):
                 (row["list_id"], None, row["title"], row["notes"], base,
                  row["due_time"], pos,
                  datetime.now().strftime("%Y-%m-%d %H:%M"), store.new_uid("td")))
-            nxt = recur.next_due(date.fromisoformat(base), row["repeat"],
-                                 row["repeat_every"], recur.parse_days(row["repeat_days"]))
-            c.execute("UPDATE tasks SET due_date=?, updated_at=datetime('now','localtime')"
-                      " WHERE id=?", (nxt.isoformat() if nxt else None, tid))
-            return {"status": "rolled", "due_date": nxt.isoformat() if nxt else None,
+            nxt = _roll_task_due(date.fromisoformat(base), row)
+            _set_task_due(c, row, nxt)
+            return {"status": "rolled", "due_date": nxt,
                     "done_id": done_cur.lastrowid}
 
         fields, args = [], []
@@ -606,12 +646,17 @@ async def task_update(tid: int, body: TaskIn):
             args.append(body.title.strip()[:200])
         if body.repeat is not None:
             rep = _norm_repeat(body.repeat)
+            gunler = _norm_days(body.repeat_days) if rep == "weekly" else ""
             fields.append("repeat=?")
             args.append(rep)
             fields.append("repeat_every=?")
             args.append(max(1, body.repeat_every or 1))
             fields.append("repeat_days=?")
-            args.append(_norm_days(body.repeat_days) if rep == "weekly" else "")
+            args.append(gunler)
+            if (rep, max(1, body.repeat_every or 1), gunler) != (
+                    row["repeat"], row["repeat_every"], row["repeat_days"]):
+                # Rule changed — old skipped slots may no longer exist.
+                fields.append("skip_dates=''")
         if body.done is not None:
             fields.append("done=?")
             args.append(int(body.done))
@@ -639,19 +684,26 @@ async def task_delete(tid: int, hard: int = 0):
 
 
 @app.post("/api/tasks/{tid}/skip")
-async def task_skip(tid: int):
-    # Rutin gorevde "yalniz bu tekrari sil": tarihi bir SONRAKI tekrara sar.
+async def task_skip(tid: int, body: SkipIn | None = None):
+    # Rutin gorevde "yalniz bu tekrari sil".  occ_date, HANGI tekrarin
+    # silindigini soyler: gelecek bir projeksiyon yalnizca atlanir; su anki
+    # tekrar (ya da occ_date verilmemisse) tarihi bir SONRAKI tekrara sarar.
+    occ = body.occ_date if body else None
     with tx() as c:
         row = c.execute("SELECT * FROM tasks WHERE id=?", (tid,)).fetchone()
         if not row:
             return JSONResponse({"error": "not_found"}, status_code=404)
         if not row["repeat"] or not row["due_date"]:
             return JSONResponse({"error": "not_recurring"}, status_code=400)
-        nxt = recur.next_due(date.fromisoformat(row["due_date"]), row["repeat"],
-                             row["repeat_every"], recur.parse_days(row["repeat_days"]))
-        c.execute("UPDATE tasks SET due_date=?, updated_at=datetime('now','localtime')"
-                  " WHERE id=?", (nxt.isoformat() if nxt else None, tid))
-    return {"status": "skipped", "due_date": nxt.isoformat() if nxt else None}
+        if occ and occ != row["due_date"]:
+            skips = ",".join(sorted(_task_skips(row) | {occ}))
+            c.execute("UPDATE tasks SET skip_dates=?,"
+                      " updated_at=datetime('now','localtime') WHERE id=?",
+                      (skips, tid))
+            return {"status": "skipped", "due_date": row["due_date"]}
+        nxt = _roll_task_due(date.fromisoformat(row["due_date"]), row)
+        _set_task_due(c, row, nxt)
+    return {"status": "skipped", "due_date": nxt}
 
 
 @app.get("/api/trash")
@@ -945,14 +997,17 @@ async def range_view(start: str | None = None, days: int = 7):
     for r in rep_task_rows:
         base = date.fromisoformat(r["due_date"])
         s0 = datetime(base.year, base.month, base.day)
+        skips = _task_skips(r)
         for occ_s, _ in recur.expand(s0, s0, r["repeat"], r["repeat_every"], None,
                                      first, last, recur.parse_days(r["repeat_days"])):
             dstr = occ_s.date().isoformat()
-            if occ_s.date() <= base or (r["id"], dstr) in seen:
+            if occ_s.date() <= base or dstr in skips or (r["id"], dstr) in seen:
                 continue
             proj = dict(r)
             proj["due_date"] = dstr
             proj["projected"] = True
+            # The client needs the series' REAL due to edit 'all' safely.
+            proj["series_due_date"] = r["due_date"]
             tasks_out.append(proj)
             seen.add((r["id"], dstr))
 

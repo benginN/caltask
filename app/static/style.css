@@ -239,7 +239,7 @@ dialog menu .danger{color:var(--now);margin-right:auto}
 .kart-alt{margin-top:5px;font-size:12px;color:var(--muted)}
 .kart-not{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
   font-size:13px;color:var(--muted);white-space:pre-wrap;word-break:break-word;
-  max-height:120px;overflow-y:auto}
+  max-height:300px;overflow-y:auto}
 
 /* make it obvious the all-day strip is clickable */
 .allday .cell{cursor:pointer}
@@ -574,6 +574,8 @@ select.tabs:focus{border-color:var(--accent)}
 /* anchored preview (Google-style): fixed next to the clicked chip, no dim */
 #dlg.pop{position:fixed;margin:0;z-index:80;width:min(370px,calc(100vw - 24px));
   box-shadow:0 16px 48px rgba(0,0,0,.55)}
+/* the anchored preview may grow tall with a long description */
+#dlg.pop .kart-not{max-height:min(48vh,420px)}
 #dlg.pop::backdrop{background:transparent}
 #dlg.pop .kart{margin-bottom:0}
 #dlg.pop .kart-son{margin-top:10px}

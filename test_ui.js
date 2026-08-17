@@ -673,6 +673,52 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('ay gorunumunde bugun rozeti var', CSS2.includes('.mcell.is-today .mnum{background:var(--accent)'));
   }
 
+  console.log('\n── rutin görev düzenleme: kapsam sorusu + seri TAŞINMAZ ──');
+  {
+    // 17 Agu tur 8: projeksiyonun tarihini seriye YAZMAK gecmis tekrarlari
+    // siliyordu — form artik yalniz degisen alanlari gonderir ve sorar.
+    const rutin = () => ({ id: 21, title: 'Akşam Rutini', due_date: iso(ekle(BUGUN, 5)),
+      due_time: '21:00', done: 0, list_id: 1, parent_id: null, repeat: 'daily',
+      repeat_days: '', notes: 'eski not', projected: true, series_due_date: iso(BUGUN) });
+    const { d, w, tk, govdeler } = await kur();
+    tk.openTask(rutin());
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('düzenleme formunun gri kartında açıklama YOK', !d.querySelector('#dlg .kart-not'));
+    bekle('açıklama kutusu büyüdü (6 satır)', d.querySelector('#t-notes').rows === 6);
+    d.querySelector('#t-notes').value = 'yeni not';
+    sub(w, d.querySelector('#dlgform'), 'ok');
+    await new Promise((r) => setTimeout(r, 20));
+    const sd = d.querySelector('#scopedlg');
+    bekle('açıklama değişince kapsam soruldu',
+      sd && sd.hasAttribute('open') && sd.textContent.includes('Rutin görevi düzenle'),
+      sd && sd.textContent.slice(0, 80));
+    sd.querySelector('input[value=all]').checked = true;
+    sub(w, sd.querySelector('form'), 'ok');
+    await new Promise((r) => setTimeout(r, 20));
+    const p = govdeler.find((g) => g.url.includes('api/tasks/21') && g.method === 'PATCH');
+    bekle('Bütün rutin → PATCH yalnız değişen alanı taşıyor', p && p.body.notes === 'yeni not', p);
+    bekle('due_date GÖNDERİLMEDİ (geçmiş tekrarlar yerinde)', p && !('due_date' in p.body), p);
+  }
+  {
+    const { d, w, tk, govdeler } = await kur();
+    const t = { id: 21, title: 'Akşam Rutini', due_date: iso(ekle(BUGUN, 5)),
+      due_time: '21:00', done: 0, list_id: 1, parent_id: null, repeat: 'daily',
+      repeat_days: '', notes: 'eski not', projected: true, series_due_date: iso(BUGUN) };
+    tk.openTask(t);
+    await new Promise((r) => setTimeout(r, 20));
+    d.querySelector('#t-notes').value = 'sadece bugün';
+    sub(w, d.querySelector('#dlgform'), 'ok');
+    await new Promise((r) => setTimeout(r, 20));
+    const sd = d.querySelector('#scopedlg');
+    sub(w, sd.querySelector('form'), 'ok');   // ilk seçenek: Yalnız bu görev
+    await new Promise((r) => setTimeout(r, 20));
+    const p = govdeler.find((g) => g.url.includes('/detach'));
+    bekle('Yalnız bu → detach + occ_date (seriye dokunulmaz)',
+      p && p.body.occ_date === t.due_date && p.body.notes === 'sadece bugün', p);
+    bekle('silmede skip HANGİ tekrarın silindiğini söylüyor',
+      JS.includes("api/tasks/${t.id}/skip") && JS.includes('occ_date: t.due_date'));
+  }
+
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
   process.exit(kaldi ? 1 : 0);
 })();

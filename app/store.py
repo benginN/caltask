@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS tasks(
   repeat_every INTEGER NOT NULL DEFAULT 1,
   -- weekly only: comma-separated weekdays '0,2' (0=Monday), '' = due's day
   repeat_days  TEXT    NOT NULL DEFAULT '',
+  -- occurrences removed/detached from the series: comma-separated 'YYYY-MM-DD'
+  skip_dates   TEXT    NOT NULL DEFAULT '',
   deleted_at   TEXT,
   uid          TEXT    NOT NULL,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
@@ -131,6 +133,7 @@ MIGRATIONS = (
     ("tasks", "repeat_days", "ALTER TABLE tasks ADD COLUMN repeat_days TEXT NOT NULL DEFAULT ''"),
     ("events", "deleted_at", "ALTER TABLE events ADD COLUMN deleted_at TEXT"),
     ("tasks", "deleted_at", "ALTER TABLE tasks ADD COLUMN deleted_at TEXT"),
+    ("tasks", "skip_dates", "ALTER TABLE tasks ADD COLUMN skip_dates TEXT NOT NULL DEFAULT ''"),
 )
 
 

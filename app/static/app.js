@@ -57,8 +57,9 @@ const STR = {
     projected: 'gelecek tekrar (tamamlama sıradaki tekrarda)',
     taskScopeTitle: 'Rutin görevi taşı', taskScopeOne: 'Yalnız bu görev',
     taskScopeAll: 'Bütün rutin (seri)', moveDlg: 'Pencereyi sürükleyerek taşı',
-    taskDelTitle: 'Rutin görevi sil', taskDelOne: 'Yalnız bu tekrar (sıradakine atla)',
+    taskDelTitle: 'Rutin görevi sil', taskDelOne: 'Yalnız bu tekrar',
     taskDelAll: 'Bu ve sonraki tekrarlar (rutin biter)',
+    taskEditTitle: 'Rutin görevi düzenle', savedOneTask: 'Yalnız bu tekrar güncellendi',
     skippedOne: 'Bu tekrar atlandı', tabTrash: 'Silinenler',
     trashEmpty: 'son 24 saatte silinen yok', trashInfo: 'Silinenler 24 saat saklanır, sonra kalıcı silinir',
     restoreBtn: 'Geri al',
@@ -111,8 +112,9 @@ const STR = {
     projected: 'upcoming repeat (complete the current one)',
     taskScopeTitle: 'Move routine task', taskScopeOne: 'Only this task',
     taskScopeAll: 'The whole routine', moveDlg: 'Drag to move this window',
-    taskDelTitle: 'Delete routine task', taskDelOne: 'Only this repeat (skip to next)',
+    taskDelTitle: 'Delete routine task', taskDelOne: 'Only this repeat',
     taskDelAll: 'This and following repeats (ends the routine)',
+    taskEditTitle: 'Edit routine task', savedOneTask: 'Only this repeat updated',
     skippedOne: 'This repeat was skipped', tabTrash: 'Deleted',
     trashEmpty: 'nothing deleted in the last 24h', trashInfo: 'Deleted items are kept for 24 hours',
     restoreBtn: 'Restore',
@@ -527,7 +529,11 @@ async function deleteTaskFlow(t) {
     const scope = await scopeDialog('taskdel', ['one', 'all']);
     if (!scope) return false;
     if (scope === 'one') {
-      await api(`api/tasks/${t.id}/skip`, { method: 'POST' });
+      // occ_date tells the server WHICH repeat was removed — deleting a
+      // future projection must not swallow the current occurrence.
+      await api(`api/tasks/${t.id}/skip`, {
+        method: 'POST', body: JSON.stringify({ occ_date: t.due_date }),
+      });
       toast(T.skippedOne);
       load(); return true;
     }
@@ -1203,8 +1209,9 @@ function toast(msg, undoFn) {
 /* ── scope dialog (only this / following / all) ───────────────────────── */
 function scopeDialog(mode, allowed) {
   const opts = allowed || ['one', 'following', 'all'];
-  const L = mode === 'taskmove'
-    ? { baslik: T.taskScopeTitle, one: T.taskScopeOne, all: T.taskScopeAll, following: '' }
+  const L = mode === 'taskmove' || mode === 'taskedit'
+    ? { baslik: mode === 'taskedit' ? T.taskEditTitle : T.taskScopeTitle,
+        one: T.taskScopeOne, all: T.taskScopeAll, following: '' }
     : mode === 'taskdel'
     ? { baslik: T.taskDelTitle, one: T.taskDelOne, all: T.taskDelAll, following: '' }
     : { baslik: mode === 'delete' ? T.scopeDelTitle : T.scopeEditTitle,
@@ -1728,7 +1735,7 @@ function openEvent(e, presetStart) {
         ${colorRow('f-color', e ? (e.own_color || '') : '')}
         ${reminderRow('f-rem', e ? e.reminders || '' : '')}
       </div>
-      <label class="f">${T.notes}<textarea id="f-notes" rows="2">${esc(e ? e.notes || '' : '')}</textarea></label>
+      <label class="f">${T.notes}<textarea id="f-notes" rows="5">${esc(e ? e.notes || '' : '')}</textarea></label>
       <menu>
         ${isNew ? '' : `<button value="del" class="danger" formnovalidate>${T.del}</button>`}
         ${isNew ? '' : `<button value="dup" formnovalidate>${T.duplicate}</button>`}
@@ -1881,7 +1888,6 @@ function openTask(t) {
         <div class="kart-ust"><span class="kart-nokta" style="background:${liste.color || 'var(--ok)'}"></span>
           <b>${esc(t.title)}</b></div>
         ${ozet ? `<div class="kart-alt">${esc(ozet)}</div>` : ''}
-        ${t.notes ? `<div class="kart-not">${esc(t.notes)}</div>` : ''}
       </div>
       <label class="chk"><input type="checkbox" id="t-done" ${t.done ? 'checked' : ''}> ${T.completed}</label>
       <label class="f">${T.title}<input id="t-title" required value="${esc(t.title)}"></label>
@@ -1895,7 +1901,7 @@ function openTask(t) {
         <label class="f">${T.repeat}<select id="t-repeat">${repeatOptions(t.repeat || '')}</select></label>
       </div>
       <div id="t-days-slot" ${t.repeat === 'weekly' ? '' : 'hidden'}>${daysRow('t-days', t.repeat_days || '', t.due_date ? (parseISO(t.due_date).getDay() + 6) % 7 : 0)}</div>
-      <label class="f">${T.notes}<textarea id="t-notes" rows="3">${esc(t.notes || '')}</textarea></label>
+      <label class="f">${T.notes}<textarea id="t-notes" rows="6">${esc(t.notes || '')}</textarea></label>
       <menu>
         <button value="del" class="danger" formnovalidate>${T.del}</button>
         <button value="cancel" formnovalidate>${T.cancel}</button>
@@ -1915,25 +1921,76 @@ function openTask(t) {
     ev.preventDefault();
     if (action === 'del') { dlg.close(); await deleteTaskFlow(t); return; }
     const bitti = $('#t-done', dlg).checked;
-    // Completing a repeating task rolls it forward server-side; save the
-    // other fields first, then send the status change separately.
-    await api(`api/tasks/${t.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        title: $('#t-title', dlg).value.trim(),
-        due_date: $('#t-date', dlg).value || '',
-        due_time: $('#t-time', dlg).value || '',
-        repeat: $('#t-repeat', dlg).value,
-        repeat_days: $('#t-repeat', dlg).value === 'weekly' ? pickedDays(dlg, 't-days') : '',
-        list_id: +$('#t-list', dlg).value,
-        notes: $('#t-notes', dlg).value.trim() || '',
-      }),
-    });
-    if (bitti !== !!t.done) {
-      await api(`api/tasks/${t.id}`, {
-        method: 'PATCH', body: JSON.stringify({ title: $('#t-title', dlg).value.trim(), done: bitti }),
-      });
+    const repNow = $('#t-repeat', dlg).value;
+    const yeni = {
+      title: $('#t-title', dlg).value.trim(),
+      due_date: $('#t-date', dlg).value || '',
+      due_time: $('#t-time', dlg).value || '',
+      repeat: repNow,
+      repeat_days: repNow === 'weekly' ? pickedDays(dlg, 't-days') : '',
+      list_id: +$('#t-list', dlg).value,
+      notes: $('#t-notes', dlg).value.trim() || '',
+    };
+    // Send only what changed: on a series the form shows the CLICKED
+    // occurrence's date, and writing that into the single series row used
+    // to swallow every earlier repeat (the projection-edit bug).
+    const diff = {};
+    if (yeni.title !== t.title) diff.title = yeni.title;
+    if (yeni.notes !== (t.notes || '')) diff.notes = yeni.notes;
+    if (yeni.list_id !== t.list_id) diff.list_id = yeni.list_id;
+    const ruleChanged = repNow !== (t.repeat || '')
+      || (repNow === 'weekly' && yeni.repeat_days !== (t.repeat_days || ''));
+    if (ruleChanged) { diff.repeat = yeni.repeat; diff.repeat_days = yeni.repeat_days; }
+    const dateChanged = yeni.due_date !== (t.due_date || '');
+    const timeChanged = yeni.due_time !== (t.due_time || '');
+    const sendDone = async () => {
+      if (bitti !== !!t.done) {
+        await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ done: bitti }) });
+      }
+    };
+
+    if (t.repeat && t.due_date && !ruleChanged
+        && (dateChanged || timeChanged || Object.keys(diff).length)) {
+      dlg.close();
+      const scope = await scopeDialog('taskedit', ['one', 'all']);
+      if (!scope) return;
+      if (scope === 'one') {
+        // This repeat detaches into a standalone copy with the edits; a
+        // future projection is marked skipped, the current one rolls on.
+        const res = await api(`api/tasks/${t.id}/detach`, {
+          method: 'POST',
+          body: JSON.stringify({
+            due_date: yeni.due_date || t.due_date, due_time: yeni.due_time,
+            occ_date: t.due_date, title: yeni.title, notes: yeni.notes,
+            list_id: yeni.list_id,
+          }),
+        });
+        if (bitti && !t.done && res.new_id) {
+          await api(`api/tasks/${res.new_id}`, { method: 'PATCH', body: JSON.stringify({ done: true }) });
+        }
+        toast(T.savedOneTask); load(); return;
+      }
+      // scope === 'all': a date edit moves the whole series by the same
+      // number of days — the pattern stays anchored, like events.
+      if (dateChanged && yeni.due_date) {
+        const delta = Math.round((parseISO(yeni.due_date) - parseISO(t.due_date)) / 86400000);
+        const d = parseISO(t.series_due_date || t.due_date);
+        d.setDate(d.getDate() + delta);
+        diff.due_date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      } else if (dateChanged) diff.due_date = '';
+      if (timeChanged) diff.due_time = yeni.due_time;
+      if (Object.keys(diff).length) {
+        await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify(diff) });
+      }
+      await sendDone(); load(); return;
     }
+
+    if (dateChanged) diff.due_date = yeni.due_date;
+    if (timeChanged) diff.due_time = yeni.due_time;
+    if (Object.keys(diff).length) {
+      await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify(diff) });
+    }
+    await sendDone();
     dlg.close(); load();
   };
   dlg.showModal();
