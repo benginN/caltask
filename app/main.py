@@ -554,7 +554,7 @@ async def task_detach(tid: int, body: DetachIn):
             "INSERT INTO tasks(list_id,parent_id,title,notes,due_date,due_time,"
             "position,repeat,repeat_every,repeat_days,uid) VALUES (?,?,?,?,?,?,?,'',1,'',?)",
             (row["list_id"], None, row["title"], row["notes"], body.due_date,
-             body.due_time if body.due_time is not None else row["due_time"],
+             (body.due_time or None) if body.due_time is not None else row["due_time"],
              pos, store.new_uid("td")))
         nxt = recur.next_due(date.fromisoformat(row["due_date"]), row["repeat"],
                              row["repeat_every"], recur.parse_days(row["repeat_days"]))

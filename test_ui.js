@@ -618,6 +618,14 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       CSS2.includes('.searchwrap:not(.acik) input'));
     bekle("'/' kisayolu aramayi ACAR", JS.includes("searchOpen(); ev.preventDefault()"));
     bekle('baska yildaki gorevlerde yil etiketi', JS.includes("txt += ` ${d.getFullYear()}`"));
+
+    // 17 Agu tur 3
+    bekle('+ dugmesi yazisiz (yalniz +)', JS.includes("$('#addbtn').textContent = '+'"));
+    bekle('surukleme metin secimini kapatir (CSS)',
+      CSS2.includes('body.dragging,body.dragging *{user-select:none !important'));
+    bekle('saatli gorev tum-gun seridine birakilabilir',
+      JS.includes("ust.closest('.allday')") || JS.includes("ust && ust.closest('.allday')"));
+    bekle('formda saat-sil dugmesi', JS.includes('t-time-sil') && CSS2.includes('.timeclear'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

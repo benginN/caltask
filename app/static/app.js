@@ -18,7 +18,7 @@ const pad = (n) => String(n).padStart(2, '0');
 const STR = {
   tr: {
     today: 'Bugün', day: 'Gün', day3: '3 gün', week: 'Hafta', day7: '7 gün',
-    month: 'Ay', agenda: 'Ajanda', add: '+ Ekle',
+    month: 'Ay', agenda: 'Ajanda', add: 'Ekle', clearTime: 'Saati kaldır (tüm güne çevir)',
     allday: 'tüm gün', tasks: 'Görevler', newTask: 'Görev ekle…',
     noTasks: 'görev yok', event: 'Etkinlik', task: 'Görev',
     title: 'Başlık', starts: 'Başlangıç', ends: 'Bitiş', allDayField: 'Tüm gün',
@@ -72,7 +72,7 @@ const STR = {
   },
   en: {
     today: 'Today', day: 'Day', day3: '3 days', week: 'Week', day7: '7 days',
-    month: 'Month', agenda: 'Schedule', add: '+ Add',
+    month: 'Month', agenda: 'Schedule', add: 'Add', clearTime: 'Clear time (make all-day)',
     allday: 'all-day', tasks: 'Tasks', newTask: 'Add a task…',
     noTasks: 'no tasks', event: 'Event', task: 'Task',
     title: 'Title', starts: 'Starts', ends: 'Ends', allDayField: 'All day',
@@ -991,6 +991,10 @@ function attachTaskGridDrag(n, t) {
     const origCol = Math.max(0, Math.round((parseISO(t.due_date) - geom.start) / 86400000));
     const m0 = (+t.due_time.slice(0, 2)) * 60 + (+t.due_time.slice(3, 5));
     n.style.transform = `translate(${(p.day - origCol) * geom.colW}px, ${((p.mins - m0) / 60) * geom.hourH}px)`;
+    // Hovering the ALL-DAY strip while dragging: dropping there clears the time
+    const ust = document.elementFromPoint(ev.clientX, ev.clientY);
+    const serit = ust && ust.closest('.allday');
+    document.querySelectorAll('.allday').forEach((a) => a.classList.toggle('droptarget', !!serit));
     edgeTrack(ev.clientX, ev.clientY);
   });
   n.addEventListener('pointerup', async (ev) => {
@@ -999,12 +1003,15 @@ function attachTaskGridDrag(n, t) {
     n.classList.remove('drag'); n.style.transform = '';
     document.body.classList.remove('dragging');
     const shift = edgeTake();
+    document.querySelectorAll('.allday.droptarget').forEach((a) => a.classList.remove('droptarget'));
     if (!wasDown) return;
     if (!wasMoved) { openTaskCard(t); return; }
     const p = dropPoint(geom, ev.clientX, ev.clientY);
     const newDate = iso(addDays(geom.start, p.day + shift * S.data.days));
-    const newTime = hm(p.mins);
-    if (newDate === t.due_date && newTime === t.due_time) { render(); return; }
+    const ust = document.elementFromPoint(ev.clientX, ev.clientY);
+    const tumGune = !!(ust && ust.closest('.allday'));   // dropped on the strip → all-day
+    const newTime = tumGune ? '' : hm(p.mins);
+    if (newDate === t.due_date && newTime === (t.due_time || '')) { render(); return; }
     edgeFollow(shift);
     let scope = 'all';
     if (t.repeat) {
@@ -1852,7 +1859,7 @@ function openTask(t) {
       <label class="f">${T.title}<input id="t-title" required value="${esc(t.title)}"></label>
       <div class="row">
         <label class="f">${T.due}<input id="t-date" type="date" value="${t.due_date || ''}"></label>
-        <label class="f">${T.time}<input id="t-time" type="time" value="${t.due_time || ''}"></label>
+        <label class="f">${T.time}<span class="timewrap"><input id="t-time" type="time" value="${t.due_time || ''}"><button type="button" class="timeclear" id="t-time-sil" title="${T.clearTime}">✕</button></span></label>
       </div>
       <div class="row">
         <label class="f">${T.list}<select id="t-list">${S.lists.map((l) =>
@@ -1872,6 +1879,8 @@ function openTask(t) {
   const trep2 = $('#t-repeat', dlg);
   trep2.onchange = () => { $('#t-days-slot', dlg).hidden = trep2.value !== 'weekly'; };
 
+  const saatSil = $('#t-time-sil', dlg);
+  if (saatSil) saatSil.onclick = () => { $('#t-time', dlg).value = ''; };
   $('#dlgform', dlg).onsubmit = async (ev) => {
     const action = ev.submitter && ev.submitter.value;
     if (action === 'cancel') return;
@@ -2224,7 +2233,8 @@ function setView(v) {
   $('#next').onclick = () => step(1);
   $('#today').onclick = () => { S.anchor = new Date(); load(); };
   $('#today').textContent = T.today;
-  $('#addbtn').textContent = T.add;
+  $('#addbtn').textContent = '+';   // label lives in the tooltip — the bar is tight
+  $('#addbtn').title = T.add;
   $('#addbtn').onclick = () => openCreate({ date: S.data.today, time: `${pad(new Date().getHours())}:00` });
   const vs = $('#viewsel');
   if (vs) {
