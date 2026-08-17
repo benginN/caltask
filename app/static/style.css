@@ -116,9 +116,10 @@ body.compact .dayhead .dow{font-size:10px}
 .ev.chip{position:static;left:auto;right:auto;border-radius:5px;padding:1px 6px;
   border-left-width:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-size:11px}
-/* task chips/blocks: the CIRCLE is the marker — the colored left border's
-   rounded corner read as a second, misaligned circle right next to it */
-.ev.task{border-left-width:0;padding-left:6px;background:color-mix(in srgb,var(--ok) 14%,transparent)}
+/* task chips/blocks: solid green edge (the user likes it) with SQUARE left
+   corners — the rounded corner was what read as a second, misaligned circle */
+.ev.task{border-left:3px solid var(--ok);border-top-left-radius:2px;border-bottom-left-radius:2px;
+  background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .ev.task.done{opacity:.5;text-decoration:line-through}
 
 .nowline{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--now);
@@ -380,8 +381,9 @@ body.dragging *{cursor:grabbing!important}
 .cbx:hover{color:var(--ok)}
 .ev.chip{display:flex;align-items:center;min-width:0}
 .ev.chip .ct{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ev.taskev{border-left-width:0;padding-left:6px;background:color-mix(in srgb,var(--ok) 14%,transparent);
-  display:flex;align-items:flex-start;gap:2px;font-size:11px}
+.ev.taskev{border-left:3px solid var(--ok);border-top-left-radius:2px;border-bottom-left-radius:2px;
+  background:color-mix(in srgb,var(--ok) 14%,transparent);
+  display:flex;align-items:center;gap:2px;font-size:11px}   /* text vertically centered */
 .ev.taskev .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ev.taskev.done{opacity:.5;text-decoration:line-through}
 
@@ -402,8 +404,10 @@ body.dragging *{cursor:grabbing!important}
 body.compact .views button{padding:2px 7px;font-size:12px}
 body.compact .zoom button{padding:2px 7px}
 
-/* future occurrences of routine tasks: hollow circle is the cue */
-.ev.task.proj,.ev.taskev.proj{cursor:pointer}
+/* future occurrences of routine tasks: hollow circle + fainter edge
+   (dashed segments used to read as broken circles — stay solid) */
+.ev.task.proj,.ev.taskev.proj{cursor:pointer;
+  border-left-color:color-mix(in srgb,var(--ok) 45%,transparent)}
 
 
 /* ── movable compact create dialog ── */

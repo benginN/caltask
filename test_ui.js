@@ -598,8 +598,10 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('panelde zoom dugmeleri YOK (kullanici istegi)',
       !PANEL.includes('id="zoomin"') && !PANEL.includes('id="zoomout"'));
     bekle('tam surumde zoom dugmeleri duruyor', INDEX.includes('id="zoomin"'));
-    bekle('gorev kutularinda sol kenar yayi kalkti (cift daire yanilsamasi)',
-      CSS2.includes('.ev.task{border-left-width:0') && CSS2.includes('.ev.taskev{border-left-width:0'));
+    bekle('gorev seridi geri ama sol koseler KARE (yay/daire yanilsamasi yok)',
+      CSS2.includes('.ev.task{border-left:3px solid var(--ok);border-top-left-radius:2px') &&
+      CSS2.includes('.ev.taskev{border-left:3px solid var(--ok);border-top-left-radius:2px'));
+    bekle('gorev yazisi dikeyde ortali', CSS2.match(/\.ev\.taskev\{[^}]*align-items:center/));
     bekle('suruklerken dar blok tam sutuna genisler',
       CSS2.includes('.daycol .ev.drag{left:2px !important'));
     bekle('kenar sayfalamasi dort isleyicide de bagli',
