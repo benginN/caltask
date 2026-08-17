@@ -1238,7 +1238,11 @@ function dueLabel(t) {
   if (t.due_date < today) { cls = 'late'; txt = T.overdue; }
   else if (t.due_date === today) { cls = 'today'; txt = T.today; }
   else if (t.due_date === iso(addDays(parseISO(today), 1))) txt = T.tomorrow;
-  else txt = `${d.getDate()} ${T.months[d.getMonth()].slice(0, 3)}`;
+  else {
+    txt = `${d.getDate()} ${T.months[d.getMonth()].slice(0, 3)}`;
+    // A due date in another year without the year reads as this year's date
+    if (String(d.getFullYear()) !== today.slice(0, 4)) txt += ` ${d.getFullYear()}`;
+  }
   return `<span class="due ${cls}">${txt}${t.due_time ? ' · ' + t.due_time : ''}</span>`;
 }
 
@@ -2097,10 +2101,35 @@ function openSettings() {
 }
 
 /* ── search ───────────────────────────────────────────────────────────── */
+function searchOpen() {
+  const w = $('.searchwrap'); if (!w) return;
+  w.classList.add('acik');
+  const i = $('#search'); if (i) i.focus();
+}
+function searchClose() {
+  const w = $('.searchwrap'); if (!w) return;
+  w.classList.remove('acik');
+}
+
 function wireSearch() {
   const inp = $('#search');
   const box = $('#searchresults');
   if (!inp || !box) return;
+  const btn = $('#searchbtn');
+  if (btn) btn.onclick = () => {
+    if ($('.searchwrap').classList.contains('acik')) { searchClose(); }
+    else searchOpen();
+  };
+  // Collapse back to the icon when focus leaves an empty box (a small delay
+  // lets clicks on the result list land first).
+  inp.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!inp.value.trim() && document.activeElement !== inp) searchClose();
+    }, 180);
+  });
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { inp.value = ''; box.hidden = true; box.innerHTML = ''; searchClose(); }
+  });
   let timer = null;
   const hide = () => { box.hidden = true; box.innerHTML = ''; };
   inp.addEventListener('input', () => {
@@ -2293,7 +2322,7 @@ function setView(v) {
     else if (ev.key === 'ArrowRight') step(1);
     else if (ev.key === 't') { S.anchor = new Date(); load(); }
     else if (ev.key === 'c') openCreate({ date: S.data.today, time: `${pad(new Date().getHours())}:00` });
-    else if (ev.key === '/') { const i = $('#search'); if (i) { i.focus(); ev.preventDefault(); } }
+    else if (ev.key === '/') { searchOpen(); ev.preventDefault(); }
     else if (views[ev.key] && !S.compact) setView(views[ev.key]);
   });
 

@@ -245,7 +245,10 @@ dialog menu .danger{color:var(--now);margin-right:auto}
 .zoom button{padding:3px 9px;border-radius:6px;font-size:14px;color:var(--muted);line-height:1.2}
 .zoom button:hover{background:var(--card);color:var(--text)}
 
-.searchwrap{position:relative}
+.searchwrap{position:relative;display:flex;align-items:center;gap:2px}
+/* the search bar is a magnifier icon; clicking it reveals the input */
+.searchwrap:not(.acik) input,.searchwrap:not(.acik) #searchresults{display:none}
+.searchwrap.acik #searchbtn{color:var(--accent)}
 .searchwrap input{background:var(--bg2);border:1px solid var(--line);border-radius:8px;
   padding:5px 10px;font-size:13px;width:170px;outline:0;color:var(--text)}
 .searchwrap input:focus{border-color:var(--accent);width:230px}

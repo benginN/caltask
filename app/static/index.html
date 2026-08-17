@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <title>Calendar</title>
-<link rel="stylesheet" href="static/style.css?v=23">
+<link rel="stylesheet" href="static/style.css?v=24">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗓</text></svg>">
 <!-- PWA: "Add to Home Screen" opens it like a full-screen app -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,6 +27,7 @@
       <div class="title" id="title"></div>
       <div class="spacer"></div>
       <div class="searchwrap full-only">
+        <button class="icon" id="searchbtn" title="Search">&#128269;</button>
         <input id="search" type="search" placeholder="Search…">
         <div id="searchresults" hidden></div>
       </div>
@@ -64,6 +65,6 @@
   </aside>
 </div>
 <dialog id="dlg"></dialog>
-<script src="static/app.js?v=23"></script>
+<script src="static/app.js?v=24"></script>
 </body>
 </html>

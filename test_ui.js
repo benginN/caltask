@@ -608,6 +608,14 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('tekrarlayan tamamlamada geri-al var', JS.includes("status === 'rolled'"));
     bekle('daire uzerinde baslayan surukleme tik sayilmaz',
       JS.includes('cbxEl(t.done, () => toggleTask(t))') && JS.includes('d0.x') );
+
+    // 17 Agu tur 2
+    bekle('arama buyutec dugmesi var (iki surumde de)',
+      INDEX.includes('id="searchbtn"') && PANEL.includes('id="searchbtn"'));
+    bekle('arama kutusu kapaliyken gizli (CSS)',
+      CSS2.includes('.searchwrap:not(.acik) input'));
+    bekle("'/' kisayolu aramayi ACAR", JS.includes("searchOpen(); ev.preventDefault()"));
+    bekle('baska yildaki gorevlerde yil etiketi', JS.includes("txt += ` ${d.getFullYear()}`"));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

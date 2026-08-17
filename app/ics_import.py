@@ -232,7 +232,11 @@ def _sched_to_local(raw) -> tuple[str | None, str | None]:
             dt = base
         except Exception:
             return None, None
-    if dt.hour == 0 and dt.minute == 0:
+    # Google stores DATE-ONLY tasks as a midnight timestamp in whatever zone
+    # they were created in; converted to server-local that lands on 22:00,
+    # 23:00, 01:00... (measured: 2.561 imported tasks carried a fake 23:00).
+    # A whole-hour time in the dead of night is an artifact, not a schedule.
+    if dt.minute == 0 and dt.hour in (22, 23, 0, 1, 2):
         return dt.date().isoformat(), None
     return dt.date().isoformat(), f"{dt.hour:02d}:{dt.minute:02d}"
 
