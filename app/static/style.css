@@ -108,7 +108,8 @@ body.compact .allday:not(.kapali){max-height:10rem;overflow-y:auto}
 .daycol{border-left:1px solid var(--line-soft);position:relative;min-width:0}
 .daycol .slot{height:var(--hour-h);border-top:1px solid var(--line-soft)}
 .daycol .slot.half{border-top-style:dotted;opacity:.55}
-.daycol.is-today{background:color-mix(in srgb, var(--accent) 5%, transparent)}
+/* Today gets NO column tint (it read as "washed out") — the marker is the
+   accent circle on the day number, like Google. */
 /* weekends intentionally render like weekdays (no tint) */
 
 .ev{position:absolute;left:2px;right:2px;border-radius:6px;padding:2px 5px;
@@ -351,6 +352,8 @@ body.dragging *{cursor:grabbing!important}
 /* ── month view cells ── */
 .mcell{border-top:1px solid var(--line-soft);padding:2px 3px;overflow:hidden}
 .mnum{font-size:11.5px;color:var(--muted);text-align:right;padding:1px 2px}
+.mcell.is-today .mnum{background:var(--accent);color:#fff;border-radius:999px;
+  width:fit-content;margin-left:auto;padding:1px 6px;font-weight:600}
 
 /* ── schedule (agenda) view ── */
 .agenda{padding:10px 14px}

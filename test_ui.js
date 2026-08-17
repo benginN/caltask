@@ -667,6 +667,10 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('eylem dugmeleri yukseldi', CSS2.includes('padding:6px 10px;font-size:15px'));
     bekle('tum kart cagrilari referans gecirir',
       !JS.includes('openTaskCard(t);') && !JS.includes('openEventCard(e);'));
+
+    // 17 Agu tur 7: bugun sutununda soluk zemin YOK, isaret gun rozeti
+    bekle('bugun sutununa zemin tonu verilmiyor', !CSS2.includes('.daycol.is-today{background'));
+    bekle('ay gorunumunde bugun rozeti var', CSS2.includes('.mcell.is-today .mnum{background:var(--accent)'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
