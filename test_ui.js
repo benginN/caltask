@@ -387,7 +387,14 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     const dlg = d.querySelector('#dlg');
     bekle('etkinliğe tıklayınca KART açıldı', dlg.hasAttribute('open') && dlg.querySelector('#cardform') !== null);
     bekle('kartta başlık + saat var', dlg.textContent.includes('Spor') && /\d{2}:\d{2}/.test(dlg.textContent));
-    bekle('kartta Düzenle düğmesi var', dlg.textContent.includes('Düzenle'));
+    bekle('kart eylemleri başlığın sağında SALT EMOJİ (🗑 ✕ ✏️)',
+      dlg.querySelector('.kart-ust .kart-eylem') !== null
+      && dlg.querySelector('.kart-eylem button[value="del"]').textContent === '🗑'
+      && dlg.querySelector('.kart-eylem button[value="cancel"]').textContent === '✕'
+      && dlg.querySelector('.kart-eylem button[value="ok"]').textContent === '✏️'
+      && !dlg.textContent.includes('Düzenle'));
+    bekle('kartta eski menu çubuğu YOK', dlg.querySelector('#cardform menu') === null);
+    bekle('tarih + tekrar TEK meta satırında', dlg.querySelector('.kart-meta') !== null);
     bekle('kartta düzenleme alanı YOK (önce oku)', dlg.querySelector('#f-title') === null);
     sub(w, dlg.querySelector('#cardform'), 'ok');
     await new Promise((r) => setTimeout(r, 20));
@@ -634,6 +641,18 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       JS.includes('res.done_id') && JS.includes('?hard=1'));
     bekle('kenar cubugu kutusu da geri-al yolundan gecer (toggleTask)',
       JS.includes('if (cb.checked && !t.done) { await toggleTask(t); return; }'));
+
+    // 17 Agu tur 5: detay karti yeniden tasarimi
+    bekle('gorev kartinda meta TEK satir (tarih·liste·tekrar birlesik)',
+      JS.includes(".filter(Boolean).join(' · ')"));
+    bekle('gorev tekrari da repeatText ile yazilir (Her gun / gun listesi)',
+      JS.includes('⟳ ${esc(repeatText(t))}'));
+    bekle('Tamamlandi sag altta (kart-son) + bitis saati etikette',
+      JS.includes('kart-son') && JS.includes('kart-donesaat') && CSS2.includes('.kart-son{display:flex;justify-content:flex-end'));
+    bekle('kart eylem stilleri var, eski buyuk-aciklama kurali kalkti',
+      CSS2.includes('.kart-eylem button') && !CSS2.includes('kart-not-buyuk') && !JS.includes('kart-not-buyuk'));
+    bekle('kart isaretlemesi de geri-al yolundan gecer',
+      JS.includes('if (ev2.target.checked && !t.done) { await toggleTask(t); return; }'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

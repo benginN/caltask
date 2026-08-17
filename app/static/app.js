@@ -1937,9 +1937,13 @@ function repeatText(e) {
 function openEventCard(e) {
   const dlg = $('#dlg');
   resetDlg(dlg);
+  // One meta line: date/time · repeat; location/reminders keep their own lines.
+  const meta = [
+    `🕐 ${esc(cardWhen(e))}`,
+    e.repeat ? `⟳ ${esc(repeatText(e))}${e.is_override ? ' · ★' : ''}` : '',
+  ].filter(Boolean).join(' · ');
   const satirlar = [
-    `<div class="kart-alt">🕐 ${esc(cardWhen(e))}</div>`,
-    e.repeat ? `<div class="kart-alt">⟳ ${esc(repeatText(e))}${e.is_override ? ' · ★' : ''}</div>` : '',
+    `<div class="kart-alt kart-meta">${meta}</div>`,
     e.location ? `<div class="kart-alt">📍 ${esc(e.location)}</div>` : '',
     e.reminders ? `<div class="kart-alt">🔔 ${e.reminders.split(',').map((m) => T.remLabels[m] || m + ' dk').join(', ')}</div>` : '',
     e.notes ? `<div class="kart-not">${esc(e.notes)}</div>` : '',
@@ -1949,14 +1953,14 @@ function openEventCard(e) {
       ${GHOST_OK}
       <div class="kart">
         <div class="kart-ust"><span class="kart-nokta" style="background:${e.color || 'var(--accent)'}"></span>
-          <b>${esc(e.title)}</b></div>
+          <b>${esc(e.title)}</b>
+          <span class="kart-eylem">
+            <button value="del" class="danger" formnovalidate title="${T.del}">🗑</button>
+            <button value="cancel" formnovalidate title="${T.close}">✕</button>
+            <button value="ok" title="${T.editBtn}">✏️</button>
+          </span></div>
         ${satirlar}
       </div>
-      <menu>
-        <button value="del" class="danger" formnovalidate>${T.del}</button>
-        <button value="cancel" formnovalidate>${T.close}</button>
-        <button value="ok" class="primary">✏️ ${T.editBtn}</button>
-      </menu>
     </form>`;
   $('#cardform', dlg).onsubmit = async (ev) => {
     const action = (ev.submitter && ev.submitter.value) || 'ok';
@@ -1988,34 +1992,36 @@ function openTaskCard(t) {
   const dlg = $('#dlg');
   resetDlg(dlg);
   const liste = (S.lists.find((l) => l.id === t.list_id) || {});
-  // Description first and as large as possible; meta lines below.
-  const satirlar = [
-    t.notes ? `<div class="kart-not kart-not-buyuk">${esc(t.notes)}</div>` : '',
-    t.due_date ? `<div class="kart-alt">🕐 ${parseISO(t.due_date).getDate()} ${T.months[parseISO(t.due_date).getMonth()]}${t.due_time ? ' · ' + t.due_time : ''}</div>` : '',
-    liste.name ? `<div class="kart-alt">📋 ${esc(liste.name)}</div>` : '',
-    t.repeat ? `<div class="kart-alt">⟳ ${T[t.repeat] || t.repeat}</div>` : '',
-    t.done ? `<div class="kart-alt">✓ ${T.completed}${t.done_at ? ' · ' + t.done_at : ''}</div>` : '',
-  ].join('');
+  // One meta line (date · list · repeat), description below it,
+  // the Done checkbox alone at the bottom right.
+  const meta = [
+    t.due_date ? `🕐 ${parseISO(t.due_date).getDate()} ${T.months[parseISO(t.due_date).getMonth()]}${t.due_time ? ' · ' + t.due_time : ''}` : '',
+    liste.name ? `📋 ${esc(liste.name)}` : '',
+    t.repeat ? `⟳ ${esc(repeatText(t))}` : '',
+    t.projected ? T.projected : '',
+  ].filter(Boolean).join(' · ');
   dlg.innerHTML = `
     <form method="dialog" id="cardform">
       ${GHOST_OK}
       <div class="kart">
         <div class="kart-ust"><span class="kart-nokta" style="background:${liste.color || 'var(--ok)'}"></span>
-          <b>${esc(t.title)}</b></div>
-        ${satirlar}
-        ${t.projected ? `<div class="kart-alt">⟳ ${T.projected}</div>` : ''}
+          <b>${esc(t.title)}</b>
+          <span class="kart-eylem">
+            <button value="del" class="danger" formnovalidate title="${T.del}">🗑</button>
+            <button value="cancel" formnovalidate title="${T.close}">✕</button>
+            <button value="ok" title="${T.editBtn}">✏️</button>
+          </span></div>
+        ${meta ? `<div class="kart-alt kart-meta">${meta}</div>` : ''}
+        ${t.notes ? `<div class="kart-not">${esc(t.notes)}</div>` : ''}
       </div>
-      ${t.projected ? '' : `<label class="chk"><input type="checkbox" id="k-done" ${t.done ? 'checked' : ''}> ${T.completed}</label>`}
-      <menu>
-        <button value="del" class="danger" formnovalidate>${T.del}</button>
-        <button value="cancel" formnovalidate>${T.close}</button>
-        <button value="ok" class="primary">✏️ ${T.editBtn}</button>
-      </menu>
+      ${t.projected ? '' : `<div class="kart-son"><label class="chk"><input type="checkbox" id="k-done" ${t.done ? 'checked' : ''}> ${T.completed}${t.done && t.done_at ? ` <span class="kart-donesaat">· ${t.done_at}</span>` : ''}</label></div>`}
     </form>`;
   const kd = $('#k-done', dlg);
   if (kd) kd.onchange = async (ev2) => {
+    dlg.close();
+    if (ev2.target.checked && !t.done) { await toggleTask(t); return; }
     await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: ev2.target.checked }) });
-    dlg.close(); load();
+    load();
   };
   $('#cardform', dlg).onsubmit = async (ev) => {
     const action = (ev.submitter && ev.submitter.value) || 'ok';

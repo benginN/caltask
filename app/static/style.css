@@ -562,10 +562,16 @@ select.tabs:focus{border-color:var(--accent)}
   border-radius:6px;padding:2px 7px;cursor:pointer;font-size:11px}
 .timeclear:hover{color:var(--text);border-color:var(--accent)}
 
-/* task card: description first and large */
-.kart-not-buyuk{margin-top:6px;padding-top:0;border-top:0;max-height:44vh;
-  font-size:13.5px;color:var(--text)}
-.kart-not-buyuk + .kart-alt{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+/* detail card: emoji actions top right, one meta line, Done bottom right */
+.kart-ust b{flex:1 1 auto;min-width:0}
+.kart-eylem{display:flex;gap:4px;flex:0 0 auto;align-self:flex-start;margin-left:auto}
+.kart-eylem button{border:1px solid var(--line);background:transparent;border-radius:7px;
+  padding:3px 8px;font-size:13.5px;line-height:1.3;cursor:pointer}
+.kart-eylem button:hover{background:var(--line)}
+.kart-meta{word-break:break-word}
+.kart-son{display:flex;justify-content:flex-end;margin-top:12px}
+.kart-son .chk{margin-bottom:0}
+.kart-donesaat{color:var(--muted);font-size:12px;font-weight:400}
 
 
 /* a lone label gets the full corner width (was clipped to "G…") */
