@@ -89,7 +89,11 @@ body.compact .dayhead .dow{font-size:10px}
 /* very narrow columns drop the weekday name, keep the number */
 @media (max-width:820px){ .dayhead .dow{display:none} }
 
-.allday{border-bottom:1px solid var(--line);min-height:24px;max-height:66px;overflow-y:auto}
+/* Expanded all-day strip shows EVERY chip (like Google Calendar's open
+   state) — the grid below just gets less room. The compact embed keeps a
+   cap so a busy week can't swallow the whole dashboard card. */
+.allday{border-bottom:1px solid var(--line);min-height:24px}
+body.compact .allday:not(.kapali){max-height:10rem;overflow-y:auto}
 .allday .lbl{font-size:10.5px;color:var(--faint);padding:4px 5px;text-align:right;
   line-height:1.2}
 .allday .cell{border-left:1px solid var(--line-soft);padding:2px;min-width:0;

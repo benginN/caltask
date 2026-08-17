@@ -626,6 +626,8 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('saatli gorev tum-gun seridine birakilabilir',
       JS.includes("ust.closest('.allday')") || JS.includes("ust && ust.closest('.allday')"));
     bekle('formda saat-sil dugmesi', JS.includes('t-time-sil') && CSS2.includes('.timeclear'));
+    bekle('acik tum-gun seridinde tavan yok (tam surum)',
+      !CSS2.includes('max-height:66px') && CSS2.includes('body.compact .allday:not(.kapali){max-height:10rem'));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
