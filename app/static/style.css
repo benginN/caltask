@@ -116,7 +116,9 @@ body.compact .dayhead .dow{font-size:10px}
 .ev.chip{position:static;left:auto;right:auto;border-radius:5px;padding:1px 6px;
   border-left-width:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-size:11px}
-.ev.task{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+/* task chips/blocks: the CIRCLE is the marker — the colored left border's
+   rounded corner read as a second, misaligned circle right next to it */
+.ev.task{border-left-width:0;padding-left:6px;background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .ev.task.done{opacity:.5;text-decoration:line-through}
 
 .nowline{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--now);
@@ -375,7 +377,7 @@ body.dragging *{cursor:grabbing!important}
 .cbx:hover{color:var(--ok)}
 .ev.chip{display:flex;align-items:center;min-width:0}
 .ev.chip .ct{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ev.taskev{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent);
+.ev.taskev{border-left-width:0;padding-left:6px;background:color-mix(in srgb,var(--ok) 14%,transparent);
   display:flex;align-items:flex-start;gap:2px;font-size:11px}
 .ev.taskev .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ev.taskev.done{opacity:.5;text-decoration:line-through}
@@ -397,8 +399,8 @@ body.dragging *{cursor:grabbing!important}
 body.compact .views button{padding:2px 7px;font-size:12px}
 body.compact .zoom button{padding:2px 7px}
 
-/* future occurrences of routine tasks: dashed edge, no fading */
-.ev.task.proj,.ev.taskev.proj{border-left-style:dashed;cursor:pointer}
+/* future occurrences of routine tasks: hollow circle is the cue */
+.ev.task.proj,.ev.taskev.proj{cursor:pointer}
 
 
 /* ── movable compact create dialog ── */
@@ -503,6 +505,13 @@ body.compact select.views{padding:3px 6px;font-size:12px}
 /* ══ trash bin & routine polish ══ */
 /* hollow, non-clickable circle on projected occurrences */
 .cbx.off{border-color:var(--faint);pointer-events:none}
+/* while dragging, an overlap-narrowed block expands to the full column so
+   the target slot is readable (it snaps to full width on drop anyway) */
+.daycol .ev.drag{left:2px !important;width:calc(100% - 6px) !important}
+/* cross-range drag badge (hold at the grid edge to page back/forward) */
+.edgebadge{position:fixed;z-index:90;background:var(--accent);color:#fff;font-size:12px;
+  font-weight:600;padding:4px 9px;border-radius:8px;pointer-events:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.4);white-space:nowrap}
 /* event boxes: two-line titles when tall, no time row when tiny */
 .ev.coksatir .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
   -webkit-box-orient:vertical;overflow:hidden;line-height:1.25}

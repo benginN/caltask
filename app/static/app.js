@@ -246,6 +246,12 @@ function renderTimeGrid() {
   const days = rangeDays(), start = parseISO(S.data.start);
   const today = S.data.today;
   const wrap = $('#gridwrap');
+  // Re-rendering the SAME view+range (completing a task, moving a block)
+  // must not jump back to the current hour — keep the scroll position.
+  const scrollKey = `${S.view}|${S.data.start}`;
+  const oldScroll = wrap.querySelector('.scroll');
+  const keepTop = (oldScroll && S._scrollKey === scrollKey) ? oldScroll.scrollTop : null;
+  S._scrollKey = scrollKey;
   wrap.innerHTML = '';
   wrap.style.setProperty('--cols', days);
   const tz2Aktif = !!S.tz2 && !S.tz2Gizli;
@@ -419,8 +425,10 @@ function renderTimeGrid() {
   scroll.appendChild(grid);
   wrap.appendChild(scroll);
 
-  // open on the current hour, like every calendar app does
+  // open on the current hour, like every calendar app does — but restore
+  // the previous position when only the content changed
   requestAnimationFrame(() => {
+    if (keepTop != null) { scroll.scrollTop = keepTop; return; }
     const hourH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hour-h')) || 44;
     const h = new Date().getHours();
     scroll.scrollTop = Math.max(0, (h - (S.compact ? 1 : 2)) * hourH);
@@ -532,11 +540,38 @@ async function deleteTaskFlow(t) {
   load(); return true;
 }
 
-function cbxEl(done) {
+function cbxEl(done, onToggle) {
   const c = el('span', 'cbx' + (done ? ' on' : ''));
   c.setAttribute('role', 'checkbox');
   c.setAttribute('aria-checked', String(!!done));
+  let d0 = null;
+  c.addEventListener('pointerdown', (ev) => { d0 = { x: ev.clientX, y: ev.clientY }; ev.stopPropagation(); });
+  c.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    // A drag that STARTED on the circle must not count as a click:
+    // accidentally completing a yearly routine hides it for a whole year
+    // (it rolls forward) — that is how a birthday task once "vanished".
+    if (d0 && Math.hypot(ev.clientX - d0.x, ev.clientY - d0.y) >= 6) { d0 = null; return; }
+    d0 = null;
+    onToggle && onToggle();
+  });
   return c;
+}
+
+/* One completion path for chips and grid blocks. Completing a REPEATING task
+   rolls it forward server-side; that jump is silent and easy to regret, so
+   it gets an Undo toast that restores the previous due date. */
+async function toggleTask(t) {
+  const oldDue = t.due_date;
+  const res = await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: !t.done }) });
+  if (res && res.status === 'rolled' && res.due_date) {
+    const d = res.due_date;
+    toast(`\u2713 \u201C${t.title}\u201D \u2192 ${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`, async () => {
+      await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ due_date: oldDue }) });
+      load();
+    });
+  }
+  load();
 }
 
 function taskChip(t) {
@@ -550,14 +585,8 @@ function taskChip(t) {
     return p;
   }
   const n = el('div', 'ev chip task' + (t.done ? ' done' : ''));
-  const cb = cbxEl(t.done);
+  const cb = cbxEl(t.done, () => toggleTask(t));
   cb.title = T.completed;
-  cb.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-  cb.onclick = async (ev) => {
-    ev.stopPropagation();
-    await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: !t.done }) });
-    load();
-  };
   const tt = el('span', 'ct'); tt.textContent = t.title;
   n.append(cb, tt);
   n.title = t.title + (t.due_time ? ` · ${t.due_time}` : '');
@@ -578,14 +607,8 @@ function taskGridNode(t) {
     return p;
   }
   const n = el('div', 'ev taskev' + (t.done ? ' done' : ''));
-  const cb = cbxEl(t.done);
+  const cb = cbxEl(t.done, () => toggleTask(t));
   cb.title = T.completed;
-  cb.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-  cb.onclick = async (ev) => {
-    ev.stopPropagation();
-    await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: !t.done }) });
-    load();
-  };
   const tt = el('span', 't'); tt.textContent = t.title;
   n.append(cb, tt);
   n.title = `${t.title} · ${t.due_time}`;
@@ -596,6 +619,10 @@ function taskGridNode(t) {
 /* month view */
 function renderMonth() {
   const wrap = $('#gridwrap');
+  const scrollKey = `${S.view}|${S.data.start}`;
+  const oldScroll = wrap.querySelector('.scroll');
+  const keepTop = (oldScroll && S._scrollKey === scrollKey) ? oldScroll.scrollTop : null;
+  S._scrollKey = scrollKey;
   wrap.innerHTML = '';
   wrap.style.setProperty('--cols', 7);
   wrap.classList.remove('tz2on');
@@ -632,11 +659,16 @@ function renderMonth() {
   }
   scroll.appendChild(g);
   wrap.appendChild(scroll);
+  if (keepTop != null) requestAnimationFrame(() => { scroll.scrollTop = keepTop; });
 }
 
 /* agenda / schedule view: a readable list of the next 30 days */
 function renderAgenda() {
   const wrap = $('#gridwrap');
+  const scrollKey = `${S.view}|${S.data.start}`;
+  const oldScroll = wrap.querySelector('.scroll');
+  const keepTop = (oldScroll && S._scrollKey === scrollKey) ? oldScroll.scrollTop : null;
+  S._scrollKey = scrollKey;
   wrap.innerHTML = '';
   wrap.classList.remove('tz2on');
   const scroll = el('div', 'scroll agenda');
@@ -682,6 +714,7 @@ function renderAgenda() {
     const p = el('div', 'aempty'); p.textContent = T.noEvents; scroll.appendChild(p);
   }
   wrap.appendChild(scroll);
+  if (keepTop != null) requestAnimationFrame(() => { scroll.scrollTop = keepTop; });
 }
 
 /* ── drag & drop engine ───────────────────────────────────────────────── */
@@ -705,6 +738,53 @@ function dropPoint(geom, clientX, clientY) {
 }
 
 const DRAG_MIN_PX = 4;
+
+/* Cross-range drag: holding the pointer at the grid's left/right edge shifts
+   the drop target one full view-range back/forward (a week in week view).
+   The grid is deliberately NOT rebuilt mid-drag — pointer capture dies with
+   the dragged node — so the shift accumulates on a floating badge and the
+   view follows the item after the drop. */
+const _edge = { dir: 0, shift: 0, timer: null, badge: null };
+function edgeLabel() {
+  const days = S.data.days;
+  const s0 = addDays(parseISO(S.data.start), _edge.shift * days);
+  const e0 = addDays(s0, days - 1);
+  const ay = T.months;
+  const txt = days === 1 ? `${s0.getDate()} ${ay[s0.getMonth()]}`
+    : s0.getMonth() === e0.getMonth() ? `${s0.getDate()}\u2013${e0.getDate()} ${ay[s0.getMonth()]}`
+    : `${s0.getDate()} ${ay[s0.getMonth()]} \u2013 ${e0.getDate()} ${ay[e0.getMonth()]}`;
+  return (_edge.shift > 0 ? '\u2192 ' : '\u2190 ') + txt;
+}
+function edgeTrack(clientX, clientY) {
+  if (S.view === 'month' || S.view === 'agenda') return;
+  const wrap = $('#gridwrap'); if (!wrap) return;
+  const r = wrap.getBoundingClientRect();
+  const dir = clientX < r.left + 36 ? -1 : clientX > r.right - 36 ? 1 : 0;
+  if (dir === _edge.dir) return;             // zone unchanged: keep the timer
+  clearInterval(_edge.timer); _edge.timer = null;
+  _edge.dir = dir;
+  if (!dir) return;
+  _edge.timer = setInterval(() => {
+    _edge.shift += _edge.dir;
+    if (!_edge.badge) { _edge.badge = el('div', 'edgebadge'); document.body.appendChild(_edge.badge); }
+    const b = _edge.badge;
+    b.textContent = edgeLabel();
+    b.style.left = `${_edge.dir > 0 ? r.right - 10 : r.left + 10}px`;
+    b.style.transform = _edge.dir > 0 ? 'translateX(-100%)' : '';
+    b.style.top = `${Math.max(r.top + 8, Math.min(clientY, r.bottom - 40))}px`;
+    b.hidden = _edge.shift === 0;
+  }, 550);
+}
+function edgeTake() {
+  clearInterval(_edge.timer);
+  const shift = _edge.shift;
+  if (_edge.badge) { _edge.badge.remove(); _edge.badge = null; }
+  _edge.dir = 0; _edge.shift = 0; _edge.timer = null;
+  return shift;
+}
+function edgeFollow(shift) {   // after a shifted drop, the view follows the item
+  if (shift) S.anchor = addDays(S.anchor, shift * S.data.days);
+}
 
 /* Move / resize for timed events in the grid. */
 function attachEventDrag(node, e, resizeHandle) {
@@ -738,6 +818,7 @@ function attachEventDrag(node, e, resizeHandle) {
       node.style.transform = `translate(${dDay * geom.colW}px, ${(dMin / 60) * geom.hourH}px)`;
       node.classList.add('drag');
       node.dataset.preview = dtStr('', Math.max(0, startMin + dMin)).trim();
+      edgeTrack(ev.clientX, ev.clientY);
     } else {
       const newEnd = Math.max(startMin + 15, p.mins);
       node.style.height = `calc(var(--hour-h) * ${(newEnd - startMin) / 60} - 2px)`;
@@ -755,11 +836,13 @@ function attachEventDrag(node, e, resizeHandle) {
       if (wasMode === 'move') { openEventCard(e); }   // read-only card first
       return;
     }
+    const shift = edgeTake();
     const p = dropPoint(geom, ev.clientX, ev.clientY);
     if (wasMode === 'move') {
       const dMin = snap15(startMin + ((ev.clientY - startY) / geom.hourH) * 60) - startMin;
-      const dDay = p.day - origCol;
+      const dDay = p.day - origCol + shift * S.data.days;
       if (!dMin && !dDay) { render(); return; }
+      edgeFollow(shift);
       const newDate = iso(addDays(parseISO(e.starts_at.slice(0, 10)), dDay));
       const ns = Math.max(0, Math.min(1425, startMin + dMin));
       await commitEventTimeChange(e, dtStr(newDate, ns), dtStr(newDate, Math.min(1439, ns + (endMin - startMin))), T.moved);
@@ -773,7 +856,7 @@ function attachEventDrag(node, e, resizeHandle) {
   resizeHandle.addEventListener('pointerdown', down('resize'));
   node.addEventListener('pointermove', move);
   node.addEventListener('pointerup', up);
-  node.addEventListener('pointercancel', () => { mode = null; node.classList.remove('drag'); node.style.transform = ''; document.body.classList.remove('dragging'); });
+  node.addEventListener('pointercancel', () => { mode = null; node.classList.remove('drag'); node.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
 }
 
 /* Resize-only handle: the bottom edge of a multi-day event's LAST segment. */
@@ -817,23 +900,27 @@ function attachChipDrag(n, e) {
     if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) >= DRAG_MIN_PX) {
       moved = true; n.classList.add('drag'); document.body.classList.add('dragging');
       markDropCell(ev.clientX, ev.clientY);
+      edgeTrack(ev.clientX, ev.clientY);
     }
   });
   n.addEventListener('pointerup', async (ev) => {
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); document.body.classList.remove('dragging');
-    const target = clearDropCell();
+    const shift = edgeTake();
+    let target = clearDropCell();
     if (!wasDown) return;
     if (!wasMoved) { openEventCard(e); return; }
+    if (target && shift) target = iso(addDays(parseISO(target), shift * S.data.days));
     if (!target || target === e.starts_at.slice(0, 10)) { render(); return; }
+    edgeFollow(shift);
     const delta = Math.round((parseISO(target) - parseISO(e.starts_at.slice(0, 10))) / 86400000);
     const s = e.all_day ? target : dtStr(target, minutesOf(e.starts_at));
     const endDate = iso(addDays(parseISO(e.ends_at.slice(0, 10)), delta));
     const en = e.all_day ? endDate : dtStr(endDate, minutesOf(e.ends_at));
     await commitEventTimeChange(e, s, en, T.moved);
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); });
+  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
 }
 
 function attachTaskChipDrag(n, t) {
@@ -849,16 +936,20 @@ function attachTaskChipDrag(n, t) {
     if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) >= DRAG_MIN_PX) {
       moved = true; n.classList.add('drag'); document.body.classList.add('dragging');
       markDropCell(ev.clientX, ev.clientY);
+      edgeTrack(ev.clientX, ev.clientY);
     }
   });
   n.addEventListener('pointerup', async (ev) => {
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); document.body.classList.remove('dragging');
-    const target = clearDropCell();
+    const shift = edgeTake();
+    let target = clearDropCell();
     if (!wasDown) return;
     if (!wasMoved) { openTaskCard(t); return; }   // body = card; circle completes
+    if (target && shift) target = iso(addDays(parseISO(target), shift * S.data.days));
     if (!target || target === t.due_date) { render(); return; }
+    edgeFollow(shift);
     // Routine task: ask whether to move only this repeat or the whole series.
     let scope = 'all';
     if (t.repeat) {
@@ -878,7 +969,7 @@ function attachTaskChipDrag(n, t) {
     });
     load();
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); });
+  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); document.body.classList.remove('dragging'); clearDropCell(); edgeTake(); });
 }
 
 /* Drag a timed-task block on the grid: day and time change together. */
@@ -900,18 +991,21 @@ function attachTaskGridDrag(n, t) {
     const origCol = Math.max(0, Math.round((parseISO(t.due_date) - geom.start) / 86400000));
     const m0 = (+t.due_time.slice(0, 2)) * 60 + (+t.due_time.slice(3, 5));
     n.style.transform = `translate(${(p.day - origCol) * geom.colW}px, ${((p.mins - m0) / 60) * geom.hourH}px)`;
+    edgeTrack(ev.clientX, ev.clientY);
   });
   n.addEventListener('pointerup', async (ev) => {
     const wasMoved = moved; const wasDown = down;
     down = null; moved = false;
     n.classList.remove('drag'); n.style.transform = '';
     document.body.classList.remove('dragging');
+    const shift = edgeTake();
     if (!wasDown) return;
     if (!wasMoved) { openTaskCard(t); return; }
     const p = dropPoint(geom, ev.clientX, ev.clientY);
-    const newDate = iso(addDays(geom.start, p.day));
+    const newDate = iso(addDays(geom.start, p.day + shift * S.data.days));
     const newTime = hm(p.mins);
     if (newDate === t.due_date && newTime === t.due_time) { render(); return; }
+    edgeFollow(shift);
     let scope = 'all';
     if (t.repeat) {
       scope = await scopeDialog('taskmove', ['one', 'all']);
@@ -930,7 +1024,7 @@ function attachTaskGridDrag(n, t) {
     });
     load();
   });
-  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); n.style.transform = ''; document.body.classList.remove('dragging'); });
+  n.addEventListener('pointercancel', () => { down = null; moved = false; n.classList.remove('drag'); n.style.transform = ''; document.body.classList.remove('dragging'); edgeTake(); });
 }
 
 let _dropCell = null;

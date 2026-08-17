@@ -593,6 +593,21 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('tam surumde app.js ve style.css damgalari esit',
           damga(INDEX) !== null && INDEX.includes(`style.css?v=${damga(INDEX)}`));
     bekle('saat oluğu sürüklenebilir işaretli', JS.includes("'hours zoomable'"));
+
+    // 17 Agu duzeltmeleri
+    bekle('panelde zoom dugmeleri YOK (kullanici istegi)',
+      !PANEL.includes('id="zoomin"') && !PANEL.includes('id="zoomout"'));
+    bekle('tam surumde zoom dugmeleri duruyor', INDEX.includes('id="zoomin"'));
+    bekle('gorev kutularinda sol kenar yayi kalkti (cift daire yanilsamasi)',
+      CSS2.includes('.ev.task{border-left-width:0') && CSS2.includes('.ev.taskev{border-left-width:0'));
+    bekle('suruklerken dar blok tam sutuna genisler',
+      CSS2.includes('.daycol .ev.drag{left:2px !important'));
+    bekle('kenar sayfalamasi dort isleyicide de bagli',
+      (JS.match(/edgeTrack\(ev\.clientX/g) || []).length >= 4 && JS.includes('function edgeTake'));
+    bekle('ayni gorunumde yeniden cizim scrollu korur', JS.includes('S._scrollKey'));
+    bekle('tekrarlayan tamamlamada geri-al var', JS.includes("status === 'rolled'"));
+    bekle('daire uzerinde baslayan surukleme tik sayilmaz',
+      JS.includes('cbxEl(t.done, () => toggleTask(t))') && JS.includes('d0.x') );
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
