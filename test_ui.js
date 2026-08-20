@@ -492,6 +492,62 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('"her N" alanı açıldı', dlg.querySelector('.rpt-every').hidden === false);
   }
 
+  console.log('\n── yeni görev: "Tüm gün" görevde de çalışır (mobil hata, 21 Ağu) ──');
+  {
+    const { d, w, tk, govdeler } = await kur();
+    tk.openCreate({ date: iso(PZT), time: '09:00' });
+    await new Promise((r) => setTimeout(r, 20));
+    const dlg = d.querySelector('#dlg');
+    // gorev turune gec — kutu artik gizlenmemeli
+    dlg.querySelectorAll('.kind')[1].onclick();
+    const chk = dlg.querySelector('#c-allday');
+    bekle('"Tüm gün" kutusu görev türünde de görünür',
+      chk.closest('label').hidden !== true && !chk.closest('label').dataset.for);
+    const saatInp = dlg.querySelector('#c-time');
+    bekle('saat alanı önceden dolu (09:00)', saatInp.value === '09:00');
+    bekle('saat yanında ✕ (saat-sil) düğmesi var', dlg.querySelector('#c-time-sil') !== null);
+    chk.checked = true;
+    chk.onchange();
+    bekle('"Tüm gün" işaretlenince saat temizlendi + kilitlendi',
+      saatInp.value === '' && saatInp.disabled === true);
+    dlg.querySelector('#c-title').value = 'Tüm gün görev';
+    sub(w, d.querySelector('#dlgform'), 'ok');
+    await new Promise((r) => setTimeout(r, 30));
+    const g = govdeler.filter((x) => x.url.includes('api/tasks') && x.method === 'POST').pop();
+    bekle('POST due_time=null gitti (saat sızmadı)', g && g.body.due_time === null,
+      g && JSON.stringify(g.body));
+    bekle('POST due_date yerinde', g && g.body.due_date === iso(PZT));
+  }
+
+  {
+    const { d, w, tk, govdeler } = await kur();
+    tk.openCreate({ date: iso(PZT), time: '09:00' });
+    await new Promise((r) => setTimeout(r, 20));
+    const dlg = d.querySelector('#dlg');
+    dlg.querySelectorAll('.kind')[1].onclick();
+    // ✕ ile saat silme: isaret kutusuna dokunmadan tum gune cevirir
+    dlg.querySelector('#c-time-sil').onclick();
+    bekle('✕ saat alanını boşalttı', dlg.querySelector('#c-time').value === '');
+    dlg.querySelector('#c-title').value = 'X ile tüm gün';
+    sub(w, d.querySelector('#dlgform'), 'ok');
+    await new Promise((r) => setTimeout(r, 30));
+    const g = govdeler.filter((x) => x.url.includes('api/tasks') && x.method === 'POST').pop();
+    bekle('✕ sonrası POST due_time=null', g && g.body.due_time === null);
+    // isaret kutusu geri acilinca saat geri gelir (etkinlik davranisiyla ayni)
+    tk.openCreate({ date: iso(PZT), time: '09:00' });
+    await new Promise((r) => setTimeout(r, 20));
+    const dlg2 = d.querySelector('#dlg');
+    dlg2.querySelectorAll('.kind')[1].onclick();
+    const chk2 = dlg2.querySelector('#c-allday');
+    chk2.checked = true; chk2.onchange();
+    chk2.checked = false; chk2.onchange();
+    const t2 = dlg2.querySelector('#c-time');
+    bekle('işaret kaldırılınca saat geri dolar + açılır', t2.value === '09:00' && t2.disabled === false);
+    // etkinlik tarafi bozulmadi: tarih tipine gecis hala calisiyor
+    chk2.checked = true; chk2.onchange();
+    bekle('etkinlik başlangıcı date tipine geçti', dlg2.querySelector('#c-start').type === 'date');
+  }
+
   console.log('\n── arama ──');
   {
     const { d, w } = await kur();

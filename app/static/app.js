@@ -1780,7 +1780,7 @@ function openCreate(preset) {
           <button type="button" class="kind" data-kind="task" aria-selected="false" title="${T.kindTask}">☑</button>
         </div>
         <input id="c-title" required autofocus placeholder="${T.title}">
-        <label class="chk ico" data-for="event"><input type="checkbox" id="c-allday" ${tumGun ? 'checked' : ''}>${T.allDayField}</label>
+        <label class="chk ico"><input type="checkbox" id="c-allday" ${tumGun ? 'checked' : ''}>${T.allDayField}</label>
       </div>
 
       <div data-for="event">
@@ -1803,7 +1803,7 @@ function openCreate(preset) {
       <div data-for="task" hidden>
         <div class="row">
           <label class="f">${T.due}<input id="c-date" type="date" value="${gun}"></label>
-          <label class="f">${T.time}<input id="c-time" type="time" value="${tumGun ? '' : saat}"></label>
+          <label class="f">${T.time}<span class="timewrap"><input id="c-time" type="time" value="${tumGun ? '' : saat}" ${tumGun ? 'disabled' : ''}><button type="button" class="timeclear" id="c-time-sil" title="${T.clearTime}">✕</button></span></label>
         </div>
         <div class="row">
           <label class="f">${T.list}<select id="c-list">${S.lists.map((l) =>
@@ -1845,6 +1845,10 @@ function openCreate(preset) {
   };
 
   const allday = $('#c-allday', dlg);
+  const ctime = $('#c-time', dlg);
+  // All-day applies to BOTH kinds: events switch to date inputs, tasks drop
+  // their due time (the mobile bug: the box was event-only, so a task created
+  // with it checked still carried the prefilled hour).
   allday.onchange = () => {
     const t = allday.checked ? 'date' : 'datetime-local';
     ['#c-start', '#c-end'].forEach((sel) => {
@@ -1853,7 +1857,11 @@ function openCreate(preset) {
       inp.type = t;
       inp.value = allday.checked ? v.slice(0, 10) : (v.length <= 10 ? `${v}T${saat}` : v);
     });
+    ctime.disabled = allday.checked;
+    ctime.value = allday.checked ? '' : (ctime.value || saat);
   };
+  const saatSilC = $('#c-time-sil', dlg);
+  if (saatSilC) saatSilC.onclick = () => { ctime.disabled = false; ctime.value = ''; };
 
   $('#dlgform', dlg).onsubmit = async (ev) => {
     if (ev.submitter && ev.submitter.value === 'cancel') return;
@@ -1874,7 +1882,7 @@ function openCreate(preset) {
         body: JSON.stringify({
           title: baslik, notes: notlar,
           due_date: $('#c-date', dlg).value || null,
-          due_time: $('#c-time', dlg).value || null,
+          due_time: allday.checked ? null : ($('#c-time', dlg).value || null),
           list_id: +$('#c-list', dlg).value || null,
           repeat: trep,
           repeat_days: tgunler,
