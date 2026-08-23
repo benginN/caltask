@@ -47,6 +47,7 @@ const STR = {
       30: '30 dk önce', 60: '1 saat önce', 120: '2 saat önce', 1440: '1 gün önce',
       2880: '2 gün önce', 10080: '1 hafta önce' },
     onDays: 'Günler', undo: 'Geri al', moved: 'taşındı', resized: 'süresi değişti',
+    doneToast: 'tamamlandı', nextOn: 'sıradaki',
     deleted: 'silindi', search: 'Ara', searchPh: 'Etkinlik ve görevlerde ara…',
     noResults: 'sonuç yok', zoomIn: 'Yakınlaştır', zoomOut: 'Uzaklaştır',
     tz2: 'İkinci saat dilimi', tz2Off: 'Kapalı', feeds: 'Takvim abonelik adresleri',
@@ -102,6 +103,7 @@ const STR = {
       30: '30 min before', 60: '1 hour before', 120: '2 hours before', 1440: '1 day before',
       2880: '2 days before', 10080: '1 week before' },
     onDays: 'On days', undo: 'Undo', moved: 'moved', resized: 'resized',
+    doneToast: 'completed', nextOn: 'next',
     deleted: 'deleted', search: 'Search', searchPh: 'Search events & tasks…',
     noResults: 'no results', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
     tz2: 'Second time zone', tz2Off: 'Off', feeds: 'Calendar feed URLs',
@@ -574,10 +576,19 @@ async function toggleTask(t) {
   const oldDue = t.due_date;
   const res = await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: !t.done }) });
   if (res && res.status === 'rolled' && res.due_date) {
+    // Repeating task: this occurrence is done, the series rolled forward.
+    // Say so explicitly — "→ date" alone read as "the task was moved".
     const d = res.due_date;
-    toast(`\u2713 \u201C${t.title}\u201D \u2192 ${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`, async () => {
+    toast(`\u2713 \u201C${t.title}\u201D ${T.doneToast} \u00B7 ${T.nextOn} ${d.slice(8, 10)}.${d.slice(5, 7)}`, async () => {
       await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ due_date: oldDue }) });
       if (res.done_id) await api(`api/tasks/${res.done_id}?hard=1`, { method: 'DELETE' });
+      load();
+    });
+  } else if (!t.done) {
+    // Plain task: confirm the completion too, so a previous toast (e.g. a
+    // routine rolled seconds earlier) cannot linger and be read as this one's.
+    toast(`\u2713 \u201C${t.title}\u201D ${T.doneToast}`, async () => {
+      await api(`api/tasks/${t.id}`, { method: 'PATCH', body: JSON.stringify({ title: t.title, done: false }) });
       load();
     });
   }

@@ -915,6 +915,50 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('iki parmak pinch zoom bağlı', JS.includes('function pinchTick') && JS.includes('_tp.size === 2'));
   }
 
+  // 23 Agu — tamamlama bildirimleri: rutin "tamamlandi · siradaki", duz gorev de bildirim verir
+  {
+    const { d, w, govdeler } = await kur();
+    const ilkFetch = w.fetch;
+    w.fetch = (u, o) => {
+      const s = String(u);
+      if (o && o.method === 'PATCH' && s.includes('api/tasks/11') && JSON.parse(o.body).done === true)
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ status: 'rolled', due_date: iso(ekle(PZT, 8)), done_id: 901 }) });
+      return ilkFetch(u, o);
+    };
+    // cekmecedeki satirlar: id 9 duz gorev, id 11 haftalik rutin
+    const cb11 = d.querySelector('.task[data-id="11"] input[type=checkbox]');
+    bekle('rutin gorevin kutusu cekmecede var', !!cb11);
+    cb11.checked = true; cb11.dispatchEvent(new w.Event('change'));
+    await new Promise((r) => setTimeout(r, 30));
+    let toastEl = d.querySelector('#toast');
+    const d8 = iso(ekle(PZT, 8));
+    bekle('rutin tamamlaninca bildirim "tamamlandi · siradaki GG.AA" (tasindi DEGIL)',
+      toastEl && toastEl.classList.contains('show') && toastEl.textContent.includes('tamamlandı') &&
+      toastEl.textContent.includes(`sıradaki ${d8.slice(8, 10)}.${d8.slice(5, 7)}`) && !toastEl.textContent.includes('taşındı'),
+      toastEl && toastEl.textContent);
+    bekle('rutin bildiriminde Geri al var', toastEl && !!toastEl.querySelector('button'));
+
+    const cb9 = d.querySelector('.task[data-id="9"] input[type=checkbox]');
+    cb9.checked = true; cb9.dispatchEvent(new w.Event('change'));
+    await new Promise((r) => setTimeout(r, 30));
+    toastEl = d.querySelector('#toast');
+    bekle('duz gorev tamamlaninca da bildirim: "✓ “rclone check” tamamlandı" (eski bildirim ezildi)',
+      toastEl && toastEl.textContent.startsWith('✓ “rclone check” tamamlandı') && !toastEl.textContent.includes('sıradaki'),
+      toastEl && toastEl.textContent);
+    const p9 = govdeler.find((g) => g.url.includes('api/tasks/9') && g.method === 'PATCH');
+    bekle('duz gorev PATCH done:true gitti', p9 && p9.body.done === true, p9);
+    // Geri al → done:false PATCH
+    govdeler.length = 0;
+    toastEl.querySelector('button').click();
+    await new Promise((r) => setTimeout(r, 30));
+    const geri = govdeler.find((g) => g.url.includes('api/tasks/9') && g.method === 'PATCH');
+    bekle('duz gorevde Geri al → done:false', geri && geri.body.done === false, geri);
+    const IDX2 = fs.readFileSync(path.join(KOK, 'index.html'), 'utf8'), PNL2 = fs.readFileSync(path.join(KOK, 'panel.html'), 'utf8');
+    const dmg = (s) => (s.match(/\?v=(\d+)/g) || []);
+    bekle('sürüm damgaları eşit ve 2+2 (index+panel, css+js)',
+      dmg(IDX2).length === 2 && dmg(PNL2).length === 2 && new Set([...dmg(IDX2), ...dmg(PNL2)]).size === 1, [dmg(IDX2), dmg(PNL2)]);
+  }
+
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
   process.exit(kaldi ? 1 : 0);
 })();
