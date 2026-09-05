@@ -173,6 +173,20 @@ const minutesOf = (s) => { const t = s.slice(11, 16); return t ? (+t.slice(0, 2)
 const snap15 = (m) => Math.max(0, Math.min(1425, Math.round(m / 15) * 15));
 const hm = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 const dtStr = (dateS, mins) => `${dateS} ${hm(mins)}`;
+/* Minutes past 1440 roll into the next day: addMin('2026-09-05', 1500) is
+   '2026-09-06 01:00' and 1440 becomes the next day's 00:00 (how iCal and
+   Google store "24:00"). Duration is counted in wall-clock minutes so a DST
+   day does not stretch or shrink it. */
+const addMin = (dateS, mins) => { const day = Math.floor(mins / 1440); return dtStr(iso(addDays(parseISO(dateS), day)), mins - day * 1440); };
+const durMin = (e) => { const days = Math.round((parseISO(e.ends_at) - parseISO(e.starts_at)) / 86400000); return Math.max(15, days * 1440 + minutesOf(e.ends_at) - minutesOf(e.starts_at)); };
+/* The end is EXCLUSIVE: an event ending at 00:00 ends at the close of the
+   previous day. Without this "22:00 – 00:00" painted a full-day block on the
+   next day and showed up in that day's month cell. */
+const effEnd = (e) => {
+  const ds = e.starts_at.slice(0, 10), de = e.ends_at.slice(0, 10), m = minutesOf(e.ends_at);
+  if (!e.all_day && m === 0 && de > ds) return { date: iso(addDays(parseISO(de), -1)), min: 1440 };
+  return { date: de, min: m };
+};
 
 function viewDef() {
   return {
@@ -384,11 +398,12 @@ function renderTimeGrid() {
     const items = [];
     for (const e of S.data.events) {
       if (e.all_day) continue;
-      if (e.starts_at.slice(0, 10) > key || e.ends_at.slice(0, 10) < key) continue;
+      const ee = effEnd(e);
+      if (e.starts_at.slice(0, 10) > key || ee.date < key) continue;
       const basta = e.starts_at.slice(0, 10) === key;
-      const sonda = e.ends_at.slice(0, 10) === key;
+      const sonda = ee.date === key;
       const s = basta ? minutesOf(e.starts_at) : 0;
-      const x = sonda ? Math.max(s + 20, minutesOf(e.ends_at) || 1440) : 1440;
+      const x = sonda ? Math.max(s + 20, ee.min) : 1440;
       items.push({ s, x, make: () => eventNode(e, { basta, sonda }) });
     }
     // Timed tasks sit in the grid at their hour as a 30-minute block.
@@ -671,7 +686,7 @@ function renderMonth() {
     const num = el('div', 'mnum');
     num.textContent = d.getDate();
     cell.appendChild(num);
-    S.data.events.filter((e) => key >= e.starts_at.slice(0, 10) && key <= e.ends_at.slice(0, 10))
+    S.data.events.filter((e) => key >= e.starts_at.slice(0, 10) && key <= effEnd(e).date)
       .slice(0, 3).forEach((e) => cell.appendChild(chip(e)));
     S.data.tasks.filter((t) => t.due_date === key && !(S.hideDone && t.done)).slice(0, 2)
       .forEach((t) => cell.appendChild(taskChip(t)));
@@ -754,8 +769,11 @@ function gridGeom() {
 function dropPoint(geom, clientX, clientY) {
   const day = Math.max(0, Math.min(geom.days - 1,
     Math.floor((clientX - geom.rect.left - geom.gutterW) / geom.colW)));
-  const mins = snap15(((clientY - geom.rect.top) / geom.hourH) * 60);
-  return { day, mins };
+  const raw = ((clientY - geom.rect.top) / geom.hourH) * 60;
+  const mins = snap15(raw);
+  // an END edge may sit on 24:00 (= next day 00:00); starts never can
+  const minsEnd = Math.max(0, Math.min(1440, Math.round(raw / 15) * 15));
+  return { day, mins, minsEnd };
 }
 
 const DRAG_MIN_PX = 4;
@@ -917,7 +935,7 @@ function attachEventDrag(node, e, resizeHandle) {
       ? (parseISO(e.starts_at.slice(0, 10)) - geom.start) / 86400000 : 0));
     origCol = Math.max(0, Math.min(geom.days - 1, Math.round((parseISO(e.starts_at.slice(0, 10)) - geom.start) / 86400000)));
     startMin = minutesOf(e.starts_at);
-    endMin = Math.max(startMin + 15, minutesOf(e.ends_at) || 1440);
+    endMin = Math.min(1440, startMin + durMin(e));   // first-day end (24:00 if it runs on)
     // Touch arms a MOVE via long press; the resize handle is an explicit
     // target, so it arms immediately.
     armed = !isTouch(ev) || m === 'resize';
@@ -952,7 +970,7 @@ function attachEventDrag(node, e, resizeHandle) {
       node.dataset.preview = dtStr('', Math.max(0, startMin + dMin)).trim();
       edgeTrack(ev.clientX, ev.clientY);
     } else {
-      const newEnd = Math.max(startMin + 15, p.mins);
+      const newEnd = Math.max(startMin + 15, p.minsEnd);
       node.style.height = `calc(var(--hour-h) * ${(newEnd - startMin) / 60} - 2px)`;
       node.classList.add('drag');
     }
@@ -978,11 +996,13 @@ function attachEventDrag(node, e, resizeHandle) {
       edgeFollow(shift);
       const newDate = iso(addDays(parseISO(e.starts_at.slice(0, 10)), dDay));
       const ns = Math.max(0, Math.min(1425, startMin + dMin));
-      await commitEventTimeChange(e, dtStr(newDate, ns), dtStr(newDate, Math.min(1439, ns + (endMin - startMin))), T.moved);
+      // keep the DURATION: a 2 h event dropped at 23:00 runs to 01:00 next
+      // day instead of being cut at 23:59 (the 'shrinks at midnight' bug)
+      await commitEventTimeChange(e, dtStr(newDate, ns), addMin(newDate, ns + durMin(e)), T.moved);
     } else {
-      const newEnd = Math.max(startMin + 15, p.mins);
+      const newEnd = Math.max(startMin + 15, p.minsEnd);
       if (newEnd === endMin) { render(); return; }
-      await commitEventTimeChange(e, e.starts_at, dtStr(e.starts_at.slice(0, 10), Math.min(1439, newEnd)), T.resized);
+      await commitEventTimeChange(e, e.starts_at, addMin(e.starts_at.slice(0, 10), newEnd), T.resized);
     }
   };
   node.addEventListener('pointerdown', down('move'));
@@ -1004,7 +1024,7 @@ function attachResizeOnly(handle, e) {
     ev.stopPropagation(); ev.preventDefault();
     let son = null;
     const mv = (e2) => {
-      son = Math.max(15, dropPoint(geom, e2.clientX, e2.clientY).mins);
+      son = Math.max(15, dropPoint(geom, e2.clientX, e2.clientY).minsEnd);
       document.body.classList.add('dragging');
     };
     const birak = () => {
@@ -1016,7 +1036,7 @@ function attachResizeOnly(handle, e) {
     const up = async () => {
       birak();
       if (son === null) return;
-      await commitEventTimeChange(e, e.starts_at, dtStr(dayKey, Math.min(1439, son)), T.resized);
+      await commitEventTimeChange(e, e.starts_at, addMin(dayKey, son), T.resized);
     };
     const iptal = () => birak();
     window.addEventListener('pointermove', mv);
@@ -1777,8 +1797,12 @@ function openCreate(preset) {
   const gun = p.date || S.data.today;
   const saat = p.time || `${pad(new Date().getHours())}:00`;
   const tumGun = !!p.allDay;
-  const bitis = p.endTime || `${pad((+saat.slice(0, 2) + 1) % 24)}:${saat.slice(3, 5)}`;
-  const bitisGun = p.endDate || gun;      // multi-day drags provide endDate
+  // default end = start + 1 h, rolling into the next day after 23:00; a
+  // drag that reaches the bottom edge hands us '24:00' = next day 00:00
+  const varsayilan = addMin(gun, (+saat.slice(0, 2)) * 60 + (+saat.slice(3, 5)) + 60);
+  let bitis = p.endTime || varsayilan.slice(11, 16);
+  let bitisGun = p.endDate || (p.endTime ? gun : varsayilan.slice(0, 10));      // multi-day drags provide endDate
+  if (bitis === '24:00') { bitisGun = iso(addDays(parseISO(bitisGun), 1)); bitis = '00:00'; }
   const startDow = (parseISO(gun).getDay() + 6) % 7;
 
   dlg.innerHTML = `
@@ -1943,7 +1967,7 @@ function openEvent(e, presetStart) {
   resetDlg(dlg);
   const isNew = !e;
   const start = e ? e.starts_at : (presetStart || `${S.data.today} 09:00`);
-  const end = e ? e.ends_at : `${start.slice(0, 10)} ${pad((+start.slice(11, 13) + 1) % 24)}:${start.slice(14, 16)}`;
+  const end = e ? e.ends_at : addMin(start.slice(0, 10), minutesOf(start) + 60);
   const startDow = (parseISO(start.slice(0, 10)).getDay() + 6) % 7;
   const rep = e ? e.repeat : '';
   dlg.innerHTML = `
@@ -2231,7 +2255,7 @@ function openTask(t) {
 
 /* ── detail cards: click → read first; Edit → the form ── */
 function cardWhen(e) {
-  const d1 = parseISO(e.starts_at.slice(0, 10)), d2 = parseISO(e.ends_at.slice(0, 10));
+  const d1 = parseISO(e.starts_at.slice(0, 10)), d2 = parseISO(effEnd(e).date);
   const g1 = `${d1.getDate()} ${T.months[d1.getMonth()]}`;
   const g2 = `${d2.getDate()} ${T.months[d2.getMonth()]}`;
   if (e.all_day) return g1 === g2 ? `${g1} · ${T.allday}` : `${g1} → ${g2} · ${T.allday}`;
@@ -2689,4 +2713,4 @@ function setView(v) {
 })();
 
 /* test hooks (jsdom) — not used by the app itself */
-window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, tzOffsetLabel, tzHour, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH, swipeIntent, pinchScale };
+window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, addMin, durMin, effEnd, tzOffsetLabel, tzHour, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH, swipeIntent, pinchScale };

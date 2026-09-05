@@ -959,6 +959,49 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       dmg(IDX2).length === 2 && dmg(PNL2).length === 2 && new Set([...dmg(IDX2), ...dmg(PNL2)]).size === 1, [dmg(IDX2), dmg(PNL2)]);
   }
 
+  console.log('\n── gece yarısı: 00:00 biten ve gün sınırını aşan etkinlikler (v36) ──');
+  {
+    const { d, tk } = await kur();
+    const g = (n) => iso(ekle(PZT, n));
+    bekle('addMin 1440 → ertesi gün 00:00', tk.addMin(g(0), 1440) === `${g(1)} 00:00`, tk.addMin(g(0), 1440));
+    bekle('addMin 1500 → ertesi gün 01:00', tk.addMin(g(0), 1500) === `${g(1)} 01:00`);
+    bekle('addMin 600 aynı gün 10:00', tk.addMin(g(0), 600) === `${g(0)} 10:00`);
+    const e1 = { starts_at: `${g(0)} 22:00`, ends_at: `${g(1)} 00:00`, all_day: false };
+    const e2 = { starts_at: `${g(0)} 23:00`, ends_at: `${g(1)} 01:00`, all_day: false };
+    bekle('durMin 22:00→00:00 = 120', tk.durMin(e1) === 120, tk.durMin(e1));
+    bekle('durMin 23:00→01:00 = 120', tk.durMin(e2) === 120, tk.durMin(e2));
+    bekle('effEnd: 00:00 biten → önceki günün 24:00ü', tk.effEnd(e1).date === g(0) && tk.effEnd(e1).min === 1440, tk.effEnd(e1));
+    bekle('effEnd: 01:00 biten → ertesi gün 60 dk', tk.effEnd(e2).date === g(1) && tk.effEnd(e2).min === 60);
+    const taban = (id, t, s, e) => ({ id, title: t, occ_date: s.slice(0, 10), all_day: false, starts_at: s, ends_at: e,
+      color: '#5b9dff', own_color: null, reminders: '', recurring: false, repeat: '', repeat_every: 1, repeat_days: '',
+      repeat_until: null, notes: null, location: null, is_override: false, series_start: s });
+    tk.S.data.events.push(taban(501, 'Gece bitiş', `${g(3)} 22:00`, `${g(4)} 00:00`));
+    tk.S.data.events.push(taban(502, 'Gece taşan', `${g(3)} 23:00`, `${g(4)} 01:00`));
+    tk.render();
+    const cols = d.querySelectorAll('.daycol');
+    const bul = (col, t) => [...col.querySelectorAll('.ev')].filter((n) => n.textContent.includes(t));
+    bekle('00:00 biten etkinlik yalnız kendi gününde (ertesi güne tam-gün blok YOK)',
+      bul(cols[3], 'Gece bitiş').length === 1 && bul(cols[4], 'Gece bitiş').length === 0,
+      [bul(cols[3], 'Gece bitiş').length, bul(cols[4], 'Gece bitiş').length]);
+    bekle('00:00 biten etkinliğin boyu 2 saat', bul(cols[3], 'Gece bitiş')[0].style.height.includes('* 2 -'), bul(cols[3], 'Gece bitiş')[0].style.height);
+    bekle('gün sınırını aşan etkinlik 2 parça (23→24, ↰ 00→01)',
+      bul(cols[3], 'Gece taşan').length === 1 && bul(cols[4], 'Gece taşan').length === 1 && bul(cols[4], 'Gece taşan')[0].classList.contains('devam'));
+    bekle('taşan parçanın boyu 1 saat', bul(cols[4], 'Gece taşan')[0].style.height.includes('* 1 -'), bul(cols[4], 'Gece taşan')[0].style.height);
+    const geom = { rect: { left: 0, top: 0 }, gutterW: 0, colW: 100, hourH: 40, days: 7, start: PZT };
+    const p = tk.dropPoint(geom, 50, 40 * 24);
+    bekle('dropPoint alt kenar: başlangıç 23:45, bitiş 24:00', p.mins === 1425 && p.minsEnd === 1440, p);
+    tk.S.view = 'month'; tk.render();
+    const hucre = [...d.querySelectorAll('.mcell')].filter((c) => c.textContent.includes('Gece bitiş'));
+    bekle('ay görünümünde 00:00 biten etkinlik TEK hücrede', hucre.length === 1, hucre.length);
+    tk.S.view = 'week'; tk.render();
+    tk.openCreate({ date: g(3), time: '22:00', endTime: '24:00' });
+    const cEnd = d.querySelector('#c-end');
+    bekle('oluşturma: sürüklemeyle 24:00 bitiş → ertesi gün 00:00', cEnd && cEnd.value === `${g(4)}T00:00`, cEnd && cEnd.value);
+    tk.openCreate({ date: g(3), time: '23:30' });
+    bekle('oluşturma: 23:30 başlangıç → varsayılan bitiş ertesi gün 00:30 (eskiden aynı gün 00:30 = sıfır uzunluk)',
+      d.querySelector('#c-end').value === `${g(4)}T00:30`, d.querySelector('#c-end').value);
+  }
+
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
   process.exit(kaldi ? 1 : 0);
 })();
