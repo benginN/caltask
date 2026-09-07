@@ -1002,6 +1002,22 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       d.querySelector('#c-end').value === `${g(4)}T00:30`, d.querySelector('#c-end').value);
   }
 
+  // ── v37: "bugün" sunucunun değil TARAYICININ tarihi ──────────────────
+  {
+    const { w, d, tk } = await kur();
+    const dun = iso(ekle(BUGUN, -1));
+    const asil = w.fetch;
+    // Sunucu başka saat diliminde: gece yarısından sonra hâlâ "dün" diyor.
+    w.fetch = (u, o) => asil(u, o).then((r) => String(u).includes('api/range')
+      ? { ok: true, status: 200, json: () => r.json().then((v) => Object.assign(v, { today: dun })) } : r);
+    await tk.load();
+    bekle('sunucu "dün" dese de S.data.today tarayıcı tarihi', tk.S.data.today === iso(BUGUN), tk.S.data.today);
+    const bugunKol = d.querySelectorAll('.daycol.is-today');
+    bekle('bugün sütunu tam 1 ve tarayıcı tarihinde', bugunKol.length === 1 && bugunKol[0].dataset.date === iso(BUGUN),
+      [...bugunKol].map((c) => c.dataset.date));
+    bekle('şu an çizgisi o sütunda', bugunKol[0] && !!bugunKol[0].querySelector('.nowline'));
+  }
+
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);
   process.exit(kaldi ? 1 : 0);
 })();

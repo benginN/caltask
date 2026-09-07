@@ -217,6 +217,11 @@ async function load() {
     api('api/tasks?include_done=1'),
   ]);
   S.data = range; S.lists = lists; S.calendars = cals; S.allTasks = tasks;
+  // "Today" is the VIEWER's date, not the server's. The hour grid and the
+  // now-line already follow the browser clock; a server in another timezone
+  // (or one the viewer travelled away from) is still on yesterday for a
+  // couple of hours after midnight, and the highlighted column lagged with it.
+  S.data.today = iso(new Date());
   S.doneTasks = all.filter((t) => t.done);
   render();
 }
