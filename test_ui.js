@@ -54,8 +54,9 @@ function veri(baslangic, gun) {
 }
 
 async function kur(opts) {
-  const dom = new JSDOM(HTML, { url: 'http://pi.local:8090/', runScripts: 'outside-only', pretendToBeVisual: true });
+  const dom = new JSDOM((opts && opts.html) || HTML, { url: 'http://pi.local:8090/', runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
+  if (opts && opts.seed) opts.seed(w);          // localStorage before the app boots
   w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   $$dialogShim(w);
   w.requestAnimationFrame = (fn) => fn();
@@ -623,6 +624,30 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     d.querySelector('#today').dispatchEvent(new w.Event('click'));
     await new Promise((r) => setTimeout(r, 30));
     bekle('"Bugün" bu haftaya döndürüyor', d.querySelector('#title').textContent === ilk);
+  }
+
+  console.log('\n── saat dilimi takvim genelinde (panel de görür) ──');
+  {
+    // v40: tam sürümde seçilen dilim TEK anahtarda; panelde ⚙ yok ama aynı değeri okur
+    const { d, w } = await kur();
+    d.querySelector('#settingsbtn').dispatchEvent(new w.Event('click'));
+    await new Promise((r) => setTimeout(r, 20));
+    const dlg = d.querySelector('#dlg');
+    dlg.querySelector('#s-tz1').value = 'Asia/Tokyo';
+    dlg.querySelector('#s-tz2').value = 'Europe/Istanbul';
+    dlg.querySelector('#dlgform').dispatchEvent(new w.Event('submit'));
+    await new Promise((r) => setTimeout(r, 20));
+    bekle('kaydet: dilim sürümden bağımsız anahtarda', w.localStorage.getItem('caltask-tz1') === 'Asia/Tokyo'
+      && w.localStorage.getItem('caltask-tz2') === 'Europe/Istanbul');
+    bekle('eski -tam anahtarı yazılmıyor', w.localStorage.getItem('caltask-tz1-tam') === null);
+    const PANELH = fs.readFileSync(path.join(KOK, 'panel.html'), 'utf8');
+    const p = await kur({ html: PANELH, seed: (ww) => { ww.localStorage.setItem('caltask-tz1', 'Asia/Tokyo'); ww.localStorage.setItem('caltask-tz2', 'Europe/Istanbul'); } });
+    bekle('panel gömmesi aynı dilimleri okur', p.tk.S.tz1 === 'Asia/Tokyo' && p.tk.S.tz2 === 'Europe/Istanbul', `${p.tk.S.tz1}/${p.tk.S.tz2}`);
+    bekle('panelde de iki sütun ve 09 satırı İstanbul 03:00', p.d.querySelectorAll('.hours .h .t2').length === 24
+      && p.d.querySelectorAll('.hours .h .t2')[9].textContent === '03:00');
+    const m = await kur({ html: PANELH, seed: (ww) => { ww.localStorage.setItem('caltask-tz1-tam', 'Europe/Berlin'); } });
+    bekle('eski -tam değeri tek seferlik taşınır (panel de görür)', m.tk.S.tz1 === 'Europe/Berlin'
+      && m.w.localStorage.getItem('caltask-tz1') === 'Europe/Berlin', m.tk.S.tz1);
   }
 
   console.log('\n── ayarlar: içe aktarma + yuvarlak kutular ──');

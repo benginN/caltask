@@ -162,6 +162,18 @@ const LS = {
   del: (k) => { try { localStorage.removeItem(k); } catch { } },
 };
 const LSK = (k) => `caltask-${k}-${S.compact ? 'panel' : 'tam'}`;
+/* Calendar-wide preferences — ONE value shared by the embed and the full
+   page. The time zones describe the calendar, not the layout; the embed
+   has no ⚙, so a per-flavor key left it on browser time forever (v40). */
+const LSG = (k) => `caltask-${k}`;
+function loadZones() {
+  for (const k of ['tz1', 'tz2']) {          // one-time migration from the old per-flavor key
+    const eski = LS.get(`caltask-${k}-tam`, null);
+    if (LS.get(LSG(k), null) == null && eski) LS.set(LSG(k), eski);
+  }
+  S.tz1 = LS.get(LSG('tz1'), null);
+  S.tz2 = LS.get(LSG('tz2'), null);
+}
 
 /* ── date helpers (local, no libraries) ───────────────────────────────── */
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -210,6 +222,7 @@ async function api(path, opts) {
 }
 
 async function load() {
+  loadZones();                       // the embed follows a change made on the full page at its next refresh
   const start = iso(rangeStart());
   const [range, lists, cals, tasks] = await Promise.all([
     api(`api/range?start=${start}&days=${rangeDays()}`),
@@ -2496,8 +2509,9 @@ function openSettings() {
     const v = $('#s-tz2', dlg).value || null;
     S.tz1 = v1;
     S.tz2 = v;
-    if (v1) LS.set(LSK('tz1'), v1); else LS.del(LSK('tz1'));
-    if (v) LS.set(LSK('tz2'), v); else LS.del(LSK('tz2'));
+    if (v1) LS.set(LSG('tz1'), v1); else LS.del(LSG('tz1'));
+    if (v) LS.set(LSG('tz2'), v); else LS.del(LSG('tz2'));
+    LS.del(LSK('tz1')); LS.del(LSK('tz2'));   // stale per-flavor copies must not resurrect an old choice
     render();
   };
   dlg.showModal();
@@ -2608,8 +2622,7 @@ function setView(v) {
   const cfg = await api('api/config').catch(() => ({ lang: 'en', first_weekday: 0 }));
   T = STR[cfg.lang] || STR.en;
   S.firstWeekday = cfg.first_weekday || 0;
-  S.tz1 = LS.get(LSK('tz1'), null);
-  S.tz2 = LS.get(LSK('tz2'), null);
+  loadZones();
   S.tz2Gizli = LS.get(LSK('tz2-gizli'), '') === '1';
   S.anchor = wallNow();               // primary zone may already be on another date
   S.hideDone = LS.get(LSK('bitenleri-gizle'), '') === '1';
