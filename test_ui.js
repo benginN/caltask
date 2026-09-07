@@ -75,6 +75,7 @@ async function kur(opts) {
       tasks: [{ id: 9, title: 'rclone check', due_date: iso(ekle(PZT, 2)), due_time: null, done: 0, list_id: 1 }],
     });
     if (s.includes('api/tasks?include_done')) return j([
+      { id: 12, title: 'Bitmiş iş', due_date: iso(PZT), due_time: null, done: 1, done_at: '2026-09-07 10:00', list_id: 1, parent_id: null, repeat: '' },
       { id: 9, title: 'rclone check', due_date: iso(ekle(PZT, 2)), due_time: null, done: 0, list_id: 1, parent_id: null, repeat: '' },
       { id: 10, title: 'Alt iş', due_date: null, due_time: null, done: 0, list_id: 1, parent_id: 9, repeat: '' },
       { id: 11, title: 'İkinci üst', due_date: null, due_time: null, done: 0, list_id: 1, parent_id: null, repeat: '' },
@@ -1016,6 +1017,22 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
     bekle('bugün sütunu tam 1 ve tarayıcı tarihinde', bugunKol.length === 1 && bugunKol[0].dataset.date === iso(BUGUN),
       [...bugunKol].map((c) => c.dataset.date));
     bekle('şu an çizgisi o sütunda', bugunKol[0] && !!bugunKol[0].querySelector('.nowline'));
+  }
+
+  // ── v38: tamamlanmış görevler yalnız "Tamamlananlar" sekmesi açılınca iner ──
+  {
+    const { w, d, tk, cagrilar } = await kur();
+    bekle('açılışta include_done İSTENMİYOR (en ağır yük)', !cagrilar.some((u) => u.includes('include_done')), cagrilar.filter((u) => u.includes('tasks')));
+    await tk.load();
+    bekle('yenilemede de istenmiyor', !cagrilar.some((u) => u.includes('include_done')));
+    const sek = d.querySelector('#tasktabsel');
+    sek.value = 'done'; sek.dispatchEvent(new w.Event('change'));
+    await new Promise((r) => setTimeout(r, 30));
+    bekle('sekme Tamamlananlar → include_done bir kez istendi', cagrilar.filter((u) => u.includes('include_done')).length === 1);
+    bekle('tamamlanmış görev listelendi', d.querySelector('#tasksbody').textContent.includes('Bitmiş iş'));
+    const onceki = cagrilar.length;
+    await tk.load();
+    bekle('sekme açıkken yenileme onu da tazeler', cagrilar.slice(onceki).some((u) => u.includes('include_done')));
   }
 
   console.log(`\n═══ ${gecti} geçti · ${kaldi} kaldı ═══\n`);

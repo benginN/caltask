@@ -211,10 +211,9 @@ async function api(path, opts) {
 
 async function load() {
   const start = iso(rangeStart());
-  const [range, lists, cals, tasks, all] = await Promise.all([
+  const [range, lists, cals, tasks] = await Promise.all([
     api(`api/range?start=${start}&days=${rangeDays()}`),
     api('api/lists'), api('api/calendars'), api('api/tasks'),
-    api('api/tasks?include_done=1'),
   ]);
   S.data = range; S.lists = lists; S.calendars = cals; S.allTasks = tasks;
   // "Today" is the VIEWER's date, not the server's. The hour grid and the
@@ -222,8 +221,16 @@ async function load() {
   // (or one the viewer travelled away from) is still on yesterday for a
   // couple of hours after midnight, and the highlighted column lagged with it.
   S.data.today = iso(new Date());
-  S.doneTasks = all.filter((t) => t.done);
+  // Completed tasks are by far the heaviest payload (hundreds of rows) and
+  // only the "Completed" tab shows them — fetch them when that tab is open
+  // instead of on every refresh (the dashboard embed reloads every 2 min).
+  if (S.taskTab === 'done') await loadDone();
   render();
+}
+
+async function loadDone() {
+  const all = await api('api/tasks?include_done=1');
+  S.doneTasks = all.filter((t) => t.done);
 }
 
 /* ── rendering ────────────────────────────────────────────────────────── */
@@ -2518,7 +2525,8 @@ function wireSearch() {
         });
       }
       for (const t of r.tasks.slice(0, 8)) {
-        mk(t.done ? '☑' : '☐', t.title, t.due_date || '', () => {
+        mk(t.done ? '☑' : '☐', t.title, t.due_date || '', async () => {
+          if (t.done && !S.doneTasks.length) await loadDone();
           const full = [...S.allTasks, ...S.doneTasks].find((x) => x.id === t.id) || t;
           openTask(full);
         });
@@ -2641,7 +2649,7 @@ function setView(v) {
     const ad = { open: T.tabOpen, done: T.tabDone, trash: T.tabTrash };
     [...sek.options].forEach((o) => { o.textContent = ad[o.value] || o.value; });
     sek.value = S.taskTab;
-    sek.onchange = () => { S.taskTab = sek.value; renderTasks(); };
+    sek.onchange = async () => { S.taskTab = sek.value; if (S.taskTab === 'done') await loadDone(); renderTasks(); };
   }
 
   // Drag-resize the task pane. The width lives in localStorage; the
