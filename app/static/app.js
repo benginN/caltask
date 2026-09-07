@@ -220,7 +220,7 @@ async function load() {
   // now-line already follow the browser clock; a server in another timezone
   // (or one the viewer travelled away from) is still on yesterday for a
   // couple of hours after midnight, and the highlighted column lagged with it.
-  S.data.today = iso(new Date());
+  S.data.today = iso(wallNow());
   // Completed tasks are by far the heaviest payload (hundreds of rows) and
   // only the "Completed" tab shows them — fetch them when that tab is open
   // instead of on every refresh (the dashboard embed reloads every 2 min).
@@ -254,11 +254,43 @@ function render() {
   renderTasks();
 }
 
-/* "the wall clock in `tz` when it is `h` o'clock here" — display-only. */
+/* Event and task times are floating wall-clock values; the PRIMARY zone
+   (S.tz1, or the browser's zone when unset) is the zone that wall clock
+   belongs to. Every other clock on screen — the second gutter column, the
+   now-line, "today" — is derived from that, never from the browser zone
+   directly (v39: with primary ≠ browser the labels drifted away from the
+   blocks, so events looked aligned with the SECOND column). */
+function tzParts(t, tz) {
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+    .formatToParts(new Date(t)).forEach((x) => { p[x.type] = x.value; });
+  return p;
+}
+/* minutes east of UTC that `tz` observes at instant `t` */
+function tzOffsetMin(t, tz) {
+  const p = tzParts(t, tz);
+  return (Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - t) / 60000;
+}
+/* the instant at which the primary zone's wall clock reads `h`:00 on `dayDate` */
+function primaryInstant(dayDate, h) {
+  if (!S.tz1) return new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), h, 0, 0);
+  const asUtc = Date.UTC(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), h, 0, 0);
+  let t = asUtc - tzOffsetMin(asUtc, S.tz1) * 60000;
+  t = asUtc - tzOffsetMin(t, S.tz1) * 60000;      // second pass settles DST edges
+  return new Date(t);
+}
+/* a Date whose LOCAL fields equal the primary zone's wall clock right now */
+function wallNow() {
+  if (!S.tz1) return new Date();
+  try {
+    const p = tzParts(Date.now(), S.tz1);
+    return new Date(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  } catch { return new Date(); }
+}
+/* "the wall clock in `tz` when the primary zone reads `h`:00" — display-only. */
 function tzHour(dayDate, h, tz) {
   try {
-    const local = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), h, 0, 0);
-    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(local);
+    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(primaryInstant(dayDate, h));
   } catch { return ''; }
 }
 function tz2Hour(dayDate, h) { return tzHour(dayDate, h, S.tz2); }
@@ -363,7 +395,8 @@ function renderTimeGrid() {
   hours.title = '↕ drag to zoom';
   for (let h = 0; h < 24; h++) {
     const x = el('div', 'h');
-    const t1 = !h ? '' : (S.tz1 ? tzHour(start, h, S.tz1) : `${pad(h)}:00`);
+    // The primary column IS the floating-time axis the blocks sit on.
+    const t1 = !h ? '' : `${pad(h)}:00`;
     if (tz2Aktif) {
       x.innerHTML = `<span class="t2">${h ? tz2Hour(start, h) : ''}</span><span class="t1">${t1}</span>`;
     } else {
@@ -429,7 +462,7 @@ function renderTimeGrid() {
     if (key === today) {
       const line = el('div', 'nowline');
       line.id = 'nowline';
-      const now = new Date();
+      const now = wallNow();
       line.style.top = `calc(var(--hour-h) * ${(now.getHours() * 60 + now.getMinutes()) / 60})`;
       col.appendChild(line);
     }
@@ -463,7 +496,7 @@ function renderTimeGrid() {
   requestAnimationFrame(() => {
     if (keepTop != null) { scroll.scrollTop = keepTop; return; }
     const hourH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hour-h')) || 44;
-    const h = new Date().getHours();
+    const h = wallNow().getHours();
     scroll.scrollTop = Math.max(0, (h - (S.compact ? 1 : 2)) * hourH);
   });
 }
@@ -1807,7 +1840,7 @@ function openCreate(preset) {
   resetDlg(dlg);
   const p = preset || {};
   const gun = p.date || S.data.today;
-  const saat = p.time || `${pad(new Date().getHours())}:00`;
+  const saat = p.time || `${pad(wallNow().getHours())}:00`;
   const tumGun = !!p.allDay;
   // default end = start + 1 h, rolling into the next day after 23:00; a
   // drag that reaches the bottom edge hands us '24:00' = next day 00:00
@@ -2578,6 +2611,7 @@ function setView(v) {
   S.tz1 = LS.get(LSK('tz1'), null);
   S.tz2 = LS.get(LSK('tz2'), null);
   S.tz2Gizli = LS.get(LSK('tz2-gizli'), '') === '1';
+  S.anchor = wallNow();               // primary zone may already be on another date
   S.hideDone = LS.get(LSK('bitenleri-gizle'), '') === '1';
   S.alldayOpen = LS.get(LSK('allday-acik'), '') === '1';
   // The compact embed can switch views too — the preference is stored
@@ -2593,11 +2627,11 @@ function setView(v) {
 
   $('#prev').onclick = () => step(-1);
   $('#next').onclick = () => step(1);
-  $('#today').onclick = () => { S.anchor = new Date(); load(); };
+  $('#today').onclick = () => { S.anchor = wallNow(); load(); };
   $('#today').textContent = T.today;
   $('#addbtn').textContent = '+';   // label lives in the tooltip — the bar is tight
   $('#addbtn').title = T.add;
-  $('#addbtn').onclick = () => openCreate({ date: S.data.today, time: `${pad(new Date().getHours())}:00` });
+  $('#addbtn').onclick = () => openCreate({ date: S.data.today, time: `${pad(wallNow().getHours())}:00` });
   const vs = $('#viewsel');
   if (vs) {
     const ad = { day: T.day, '3day': T.day3, week: T.week, '7day': T.day7, month: T.month, agenda: T.agenda };
@@ -2706,8 +2740,8 @@ function setView(v) {
     const views = { d: 'day', 1: 'day', x: '3day', 3: '3day', w: 'week', 7: '7day', m: 'month', a: 'agenda' };
     if (ev.key === 'ArrowLeft') step(-1);
     else if (ev.key === 'ArrowRight') step(1);
-    else if (ev.key === 't') { S.anchor = new Date(); load(); }
-    else if (ev.key === 'c') openCreate({ date: S.data.today, time: `${pad(new Date().getHours())}:00` });
+    else if (ev.key === 't') { S.anchor = wallNow(); load(); }
+    else if (ev.key === 'c') openCreate({ date: S.data.today, time: `${pad(wallNow().getHours())}:00` });
     else if (ev.key === '/') { searchOpen(); ev.preventDefault(); }
     else if (views[ev.key] && !S.compact) setView(views[ev.key]);
   });
@@ -2716,7 +2750,7 @@ function setView(v) {
   setInterval(() => {
     const line = $('#nowline');
     if (!line) return;
-    const now = new Date();
+    const now = wallNow();
     line.style.top = `calc(var(--hour-h) * ${(now.getHours() * 60 + now.getMinutes()) / 60})`;
   }, 60000);
 
@@ -2726,4 +2760,4 @@ function setView(v) {
 })();
 
 /* test hooks (jsdom) — not used by the app itself */
-window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, addMin, durMin, effEnd, tzOffsetLabel, tzHour, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH, swipeIntent, pinchScale };
+window.__caltask = { S, load, render, snap15, dropPoint, gutterZoom, spanSegments, addMin, durMin, effEnd, tzOffsetLabel, tzHour, wallNow, openCreate, openEvent, openTask, openEventCard, openTaskCard, scopeDialog, tz2Hour, applyHourH, swipeIntent, pinchScale };

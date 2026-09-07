@@ -329,13 +329,22 @@ const sub = (w, form, value) => form.onsubmit({ submitter: { value }, preventDef
       /^GMT[+-]\d/.test(tzl[0]) && /^GMT[+-]\d/.test(tzl[1]), tzl.join('|'));
     bekle('tzOffsetLabel İstanbul GMT+3', tk.tzOffsetLabel('Europe/Istanbul') === 'GMT+3',
       tk.tzOffsetLabel('Europe/Istanbul'));
-    // birinci sutun da secilebilir: tz1 = Tokyo -> saatler kayar
+    // v39: birinci sutun KAYITLI saatlerin eksenidir (etkinlikler ona hizali);
+    // ikinci sutun tarayiciya gore degil BIRINCI dilime gore cevrilir.
     tk.S.tz1 = 'Asia/Tokyo';
     tk.render();
     const t1ler = [...d.querySelectorAll('.hours .h .t1')].map((x) => x.textContent);
-    bekle('birinci sütun seçilen dilime göre yazılıyor',
-      /^\d{2}:\d{2}$/.test(t1ler[5]) && t1ler[5] !== '05:00', t1ler[5]);
+    bekle('birinci sütun kayıtlı saatleri yazar (dilim seçilse de 05:00 kalır)', t1ler[5] === '05:00', t1ler[5]);
+    const t2ler = [...d.querySelectorAll('.hours .h .t2')].map((x) => x.textContent);
+    bekle('ikinci sütun birinci dilime göre çevrilir (Tokyo 09:00 = İstanbul 03:00)', t2ler[9] === '03:00', t2ler[9]);
+    bekle('tzHour yaz saati kenarında da tutarlı (Tokyo 00:00 = İstanbul 18:00 önceki gün)',
+      tk.tzHour(BUGUN, 0, 'Europe/Istanbul') === '18:00', tk.tzHour(BUGUN, 0, 'Europe/Istanbul'));
+    const tokyoSaat = +new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: 'numeric', hourCycle: 'h23' }).format(new Date());
+    bekle('şimdi çizgisi / bugün birinci dilimi izler (wallNow Tokyo saati)', tk.wallNow().getHours() === tokyoSaat,
+      `${tk.wallNow().getHours()} vs ${tokyoSaat}`);
     tk.S.tz1 = null;
+    tk.render();
+    bekle('birinci dilim boşken wallNow tarayıcı saati', Math.abs(tk.wallNow() - new Date()) < 2000);
     bekle('saat oluğu çift sütunlu', d.querySelectorAll('.hours .h .t2').length === 24);
     const yerel = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const beklenen = tk.tz2Hour(BUGUN, 9);
